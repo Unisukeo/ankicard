@@ -289,6 +289,41 @@ document.addEventListener('pointerdown', e => {
   SE.pop();
 }, true);
 
+// ---------- Clawd（アイコンと同じ絵。座標は 512×512） ----------
+// face：'normal'（まばたき）・'smile'（^ ^）・'xx'（> <）
+// sign：'o'・'x'・null（札を両手で上げる）／ arms：'down'・'up'（札がないとき）
+function clawd({ face = 'normal', sign = null, arms = 'down', cls = '' } = {}) {
+  const B = '#D97757', K = '#1F1A17';
+  const rect = (x, y, w, h, fill, extra = '') => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"${extra}/>`;
+  let g = `<ellipse cx="256" cy="468" rx="126" ry="10" fill="${K}" opacity="0.1"/>`;
+  let view = '100 225 312 262';
+  if (sign) {
+    view = '80 40 352 447';
+    g += rect(127, 190, 8, 26, '#9A7356') + rect(377, 190, 8, 26, '#9A7356');
+    g += `<rect x="96" y="54" width="320" height="140" rx="12" fill="#fff" stroke="${K}" stroke-width="8"/>`;
+    g += sign === 'o'
+      ? `<circle cx="256" cy="124" r="46" fill="none" stroke="#E53935" stroke-width="16"/>`
+      : `<path d="M220 88L292 160M292 88L220 160" stroke="#1E63C8" stroke-width="17" stroke-linecap="round"/>`;
+    g += rect(119, 210, 25, 102, B) + rect(369, 210, 25, 102, B);
+  } else if (arms === 'up') {
+    g += rect(119, 267, 25, 55, B) + rect(369, 267, 25, 55, B);
+  } else {
+    g += rect(119, 304, 25, 55, B) + rect(369, 304, 25, 55, B);
+  }
+  for (const x of [144, 194, 294, 344]) g += rect(x, 397, 25, 69, B);
+  g += rect(144, 250, 225, 162, B);
+  const line = pts => `<polyline points="${pts}" fill="none" stroke="${K}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (face === 'smile') {
+    g += `<ellipse cx="166" cy="354" rx="16" ry="8" fill="#EE9C86"/><ellipse cx="347" cy="354" rx="16" ry="8" fill="#EE9C86"/>`;
+    g += line('162,334 183,304 204,334') + line('309,334 330,304 351,334');
+  } else if (face === 'xx') {
+    g += line('165,300 199,318 165,336') + line('348,300 314,318 348,336');
+  } else {
+    g += rect(176, 296, 17, 40, K, ' class="eye"') + rect(320, 296, 17, 40, K, ' class="eye"');
+  }
+  return `<svg class="clawd ${cls}" viewBox="${view}" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${g}</svg>`;
+}
+
 // ---------- 演出 ----------
 function bigMark(kind) {
   const fx = document.createElement('div');
@@ -300,12 +335,14 @@ function bigMark(kind) {
       const ang = (i / 26) * Math.PI * 2 + Math.random() * 0.3, dist = 140 + Math.random() * 120;
       bits += `<i style="--dx:${Math.cos(ang) * dist}px;--dy:${Math.sin(ang) * dist}px;--r:${Math.random() * 720 - 360}deg;background:${colors[i % colors.length]};animation-delay:${Math.random() * 0.08}s"></i>`;
     }
-    fx.innerHTML = `<div class="burst">${bits}</div><svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="74"/></svg>`;
+    fx.innerHTML = `<div class="burst">${bits}</div><svg class="mark" viewBox="0 0 200 200"><circle cx="100" cy="100" r="74"/></svg>`
+      + `<div class="pop">${clawd({ face: 'smile', sign: 'o' })}</div>`;
   } else {
-    fx.innerHTML = `<svg viewBox="0 0 200 200"><path d="M50 50 L150 150 M150 50 L50 150"/></svg>`;
+    fx.innerHTML = `<svg class="mark" viewBox="0 0 200 200"><path d="M50 50 L150 150 M150 50 L50 150"/></svg>`
+      + `<div class="pop">${clawd({ face: 'xx', sign: 'x' })}</div>`;
   }
   document.body.appendChild(fx);
-  setTimeout(() => fx.remove(), kind === 'o' ? 900 : 600);
+  setTimeout(() => fx.remove(), kind === 'o' ? 1000 : 800);
 }
 
 // ---------- 小物 ----------
@@ -351,6 +388,7 @@ function viewHome() {
   const flagged = CARDS.filter(c => st[c.id].flag);
   const top = solved.slice(0, 3);
   render(`
+    <div class="greet">${clawd({ cls: 'mini' })}<div class="bubble">${esc(greeting(hot, fresh.length, doneToday))}</div></div>
     <div class="counts">
       <div class="count"><b>${hot}</b><span>× あり（最近3日）</span></div>
       <div class="count"><b>${fresh.length}</b><span>まだ解いていない</span></div>
@@ -369,6 +407,13 @@ function viewHome() {
   const fb = document.getElementById('flagged');
   if (fb) fb.onclick = () => startSession('「直して」', flagged.sort(byAttention(st)));
   bindTreeToggles();
+}
+function greeting(hot, fresh, done) {
+  if (done && !hot && !fresh) return `今日は ${done}枚 ○！ ばっちり`;
+  if (done) return `今日は ${done}枚 ○。いい調子！`;
+  if (hot) return `× が残ってるのが ${hot}枚。いっしょにやろう`;
+  if (fresh) return `まだ解いてないのが ${fresh}枚あるよ`;
+  return 'きょうも1枚ずつ';
 }
 // 科目を開くと分野が並び、分野を開くと論点（カード）が並ぶ
 const OPEN = new Set(loadJSON('ankicard.open', []));
@@ -417,7 +462,7 @@ function viewSolve() {
   const S = SESSION;
   if (S.pos >= S.queue.length) {
     render(`<div class="panel done">
-      <div class="big-mark">○</div>
+      <div class="done-clawd"><div class="sparkle">${'<i></i>'.repeat(6)}</div>${clawd({ face: 'smile', arms: 'up', cls: 'hop' })}</div>
       <p><b>「${esc(S.label)}」おわり</b></p>
       <p class="muted">${S.total}枚 ・ 1回目で ○ ${S.o}枚 ・ × のあと やり直し ${S.x}枚</p>
       <a class="btn primary" href="#home">ホームへ</a>
