@@ -1,5 +1,5 @@
 # アイコンを作る：Clawd が ○ と × の札を両手で上げている絵（本人用）
-# （前の平らな絵。今のアイコンは make_icon_soft.py）python -X utf8 make_icons.py → icon.svg・icon-180.png・icon-512.png
+# （○× の札の前の絵。今のアイコンは make_icon_bulb.py）python -X utf8 make_icons.py → icon.svg・icon-180.png・icon-512.png
 # 座標は 512×512。PNG は4倍で描いてから縮める（ふちをなめらかに）。
 from PIL import Image, ImageDraw
 

@@ -1,7 +1,7 @@
 // 電波がなくても開けるように、画面とカードを取っておく。
 // 先にネットを見に行き、つながらないときだけ取っておいたものを使う（作り直しがすぐ反映されるように）。
-const CACHE = 'ankicard-v8';
-const SHELL = ['./', 'index.html', 'app.js', 'stats.js', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
+const CACHE = 'ankicard-v9';
+const SHELL = ['./', 'index.html', 'app.js', 'stats.js', 'manifest.webmanifest', 'icon.svg', 'icon-180.png', 'icon-512.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(CACHE).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
 });

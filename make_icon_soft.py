@@ -1,5 +1,5 @@
 # ふっくらした立体の Clawd（角の丸い箱をなめらかにつなぎ、光を当てて描く）
-# アプリのアイコン（2026-11-25〜。前の平らな絵は make_icons.py）
+# 2026-11-25 に一度だけ使ったふっくらした立体のアイコン（今のアイコンは make_icon_bulb.py）
 # python -X utf8 make_icon_soft.py → icon-180.png・icon-512.png（2 分ほどかかる）
 import math, sys
 import numpy as np
