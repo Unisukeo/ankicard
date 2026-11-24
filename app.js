@@ -119,6 +119,7 @@ async function pullCards() {
   }
   localStorage.setItem(KEY_DECKS, JSON.stringify(next));
   CARDS = cardsFromDecks(next);
+  LOAD_ERROR = '';
 }
 function mergeEvents(lines) {
   const all = events();
@@ -232,6 +233,7 @@ async function loadCards() {
     CARDS = cardsFromDecks(loadJSON(KEY_DECKS, {})); // まず取っておいたもので出す。新しいものは sync で
     return;
   }
+  if (!/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) { LOAD_ERROR = 'NEED_TOKEN'; return; } // 公開のページ：合い鍵がないと読めない
   try { CARDS = cardsFromDecks(await loadLocalCards()); }
   catch (err) { LOAD_ERROR = String(err.message || err); }
 }
@@ -338,6 +340,7 @@ function tree() {
 // ---------- ホーム ----------
 function viewHome() {
   setNav('home');
+  if (LOAD_ERROR === 'NEED_TOKEN') return render(`<div class="panel"><b>はじめに</b><p>カードは非公開のリポジトリにあるので、合い鍵が要る。<a href="#settings">設定</a>の「合い鍵」に入れて「保存して同期」を押してね。</p></div>`);
   if (LOAD_ERROR) return render(`<div class="err">カードが読めなかった：${esc(LOAD_ERROR)}</div>`);
   if (!CARDS.length) return render(`<div class="panel">${online() ? (SYNC.state === 'busy' || SYNC.state === 'idle' ? 'カードを読み込み中…' : `カードが読めなかった：${esc(SYNC.msg || 'cards/ にカードがない')}<br><a href="#settings">設定</a>で合い鍵を確かめて`) : 'カードがない'}</div>`);
   const st = state(), set = settings();
