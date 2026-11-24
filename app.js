@@ -192,8 +192,9 @@ function sync({ cards = true } = {}) {
       await pullRecords();
       SYNC.state = 'ok'; SYNC.msg = ''; SYNC.at = new Date();
     } catch (err) {
-      SYNC.state = navigator.onLine === false ? 'offline' : 'err';
-      SYNC.msg = String(err.message || err);
+      const net = err instanceof TypeError || navigator.onLine === false; // つながらないときは fetch が TypeError を出す
+      SYNC.state = net ? 'offline' : 'err';
+      SYNC.msg = net ? '電波がないか、GitHub につながらない（記録はこの中にためてある）' : String(err.message || err);
     } finally {
       syncing = null; showSync();
     }
