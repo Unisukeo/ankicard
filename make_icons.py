@@ -14,7 +14,11 @@ BOARD = '#FFFFFF'
 # Clawd（元の絵を 0.42 倍）
 body = (144, 250, 369, 412)
 legs = [(x, 397, x + 25, 466) for x in (144, 194, 294, 344)]
-eyes = [(176, 296, 193, 336), (320, 296, 337, 336)]
+# 目は笑顔（^ ^）。元の「できた！」の目を 0.42 倍
+smile = [[(162, 334), (183, 304), (204, 334)], [(309, 334), (330, 304), (351, 334)]]
+smile_w = 13
+BLUSH = '#EE9C86'
+cheeks = [(150, 346, 182, 362), (331, 346, 363, 362)]  # ほっぺ
 arms = [(119, 210, 144, 312), (369, 210, 394, 312)]
 # 札（左が ○、右が ×）
 signs = [(56, 62, 206, 188), (306, 62, 456, 188)]
@@ -39,7 +43,10 @@ def svg():
     parts += [r(a, BODY) for a in arms]
     parts += [r(l, BODY) for l in legs]
     parts.append(r(body, BODY))
-    parts += [r(e, INK) for e in eyes]
+    for c in cheeks:
+        parts.append(f'<ellipse cx="{(c[0]+c[2])/2}" cy="{(c[1]+c[3])/2}" rx="{(c[2]-c[0])/2}" ry="{(c[3]-c[1])/2}" fill="{BLUSH}"/>')
+    for pts in smile:
+        parts.append('<polyline points="' + ' '.join(f'{x},{y}' for x, y in pts) + f'" fill="none" stroke="{INK}" stroke-width="{smile_w}" stroke-linecap="round" stroke-linejoin="round"/>')
     return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" shape-rendering="geometricPrecision">'
             + ''.join(parts) + '</svg>\n')
 
@@ -68,8 +75,10 @@ def png(size):
             d.ellipse(sc((p[0] - rr, p[1] - rr, p[0] + rr, p[1] + rr)), fill=BLUE)
     for b in arms + legs + [body]:
         d.rectangle(sc((b[0], b[1], b[2] - 1, b[3] - 1)), fill=BODY)
-    for e in eyes:
-        d.rectangle(sc((e[0], e[1], e[2] - 1, e[3] - 1)), fill=INK)
+    for pts in smile:
+        d.line([v * k for p in pts for v in p], fill=INK, width=smile_w * k, joint='curve')
+    for c in cheeks:
+        d.ellipse(sc(c), fill=BLUSH)
     return im.resize((size, size), Image.LANCZOS)
 
 
