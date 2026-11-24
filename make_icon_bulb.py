@@ -19,22 +19,22 @@ METAL = '#8D8A86'
 METAL2 = '#B9B5AF'
 
 # Clawd：元の絵（胴 144..369）を S 倍して、下の端に寄せる
-S = 1.5
+S = 1.65
 OX, OY = 256 - 256.5 * S, 506 - 466 * S   # 足の先が 506 に来るように
 def T(x, y): return (OX + x * S, OY + y * S)
 def R(x0, y0, x1, y1): return (*T(x0, y0), *T(x1, y1))
 
 shapes = []  # (種類, 引数…)
 # 豆電球（頭の上、まん中）
-bx, by, br = 256, 84, 34
+bx, by, br = 256, 86, 24
 q = br / 54  # 口金などは電球の大きさに合わせる
 for k in range(8):                       # 光の線（下の2本は電球の口金にかかるので省く）
     a = math.radians(-90 + (k - 3.5) * 32)
     if math.sin(a) > 0.35:
         continue
-    r0, r1 = br + 12, br + 27
-    shapes.append(('line', [(bx + r0 * math.cos(a), by + r0 * math.sin(a)), (bx + r1 * math.cos(a), by + r1 * math.sin(a))], 11, RAY))
-shapes.append(('ellipse', (bx - br - 8, by - br - 8, bx + br + 8, by + br + 8), GLOW))
+    r0, r1 = br + 10, br + 22
+    shapes.append(('line', [(bx + r0 * math.cos(a), by + r0 * math.sin(a)), (bx + r1 * math.cos(a), by + r1 * math.sin(a))], 9, RAY))
+shapes.append(('ellipse', (bx - br - 6, by - br - 6, bx + br + 6, by + br + 6), GLOW))
 shapes.append(('ellipse', (bx - br, by - br, bx + br, by + br), GLASS))
 shapes.append(('poly', [(bx - 30 * q, by + 38 * q), (bx + 30 * q, by + 38 * q), (bx + 22 * q, by + 64 * q), (bx - 22 * q, by + 64 * q)], GLASS))
 shapes.append(('ellipse', (bx - 34 * q, by - 34 * q, bx - 12 * q, by - 6 * q), '#FFF6D6'))     # つや
