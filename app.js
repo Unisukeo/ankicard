@@ -580,7 +580,8 @@ function viewSettings() {
     <div class="panel">
       <p style="margin-top:0">このブラウザにたまっている記録：${ev.length}件</p>
       <div class="row"><button id="export">記録を書き出す（.jsonl）</button></div>
-      <div class="row"><button id="wipe" style="color:var(--fix)">記録を全部消す</button><span class="muted">試しに解いたぶんを消すとき</span></div>
+      <div class="row"><button id="wipe" style="color:var(--fix)">${s.token ? 'この端末の記録を消して、GitHub から読み直す' : '記録を全部消す'}</button></div>
+      <p class="muted" style="margin:0">${s.token ? 'GitHub にある記録は消えない（消すときは AI に頼む）。この端末の中を GitHub と同じにするとき' : '試しに解いたぶんを消すとき'}</p>
     </div>
   `);
   const save = () => saveSettings(Object.assign(settings(), {
@@ -611,9 +612,16 @@ function viewSettings() {
     a.href = URL.createObjectURL(blob); a.download = `${today()}_${settings().device}.jsonl`; a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
   };
-  document.getElementById('wipe').onclick = () => {
-    if (!confirm(`記録 ${ev.length}件を全部消す？（元に戻せない）`)) return;
-    localStorage.removeItem(KEY_EVENTS); viewSettings();
+  document.getElementById('wipe').onclick = async () => {
+    if (!settings().token) {
+      if (!confirm(`記録 ${ev.length}件を全部消す？（元に戻せない）`)) return;
+      localStorage.removeItem(KEY_EVENTS); return viewSettings();
+    }
+    const n = ev.filter(e => e._p).length;
+    if (!confirm(`この端末の記録を消して、GitHub から読み直す？${n ? `\nまだ送っていない記録 ${n}件は消える。` : ''}`)) return;
+    localStorage.removeItem(KEY_EVENTS); localStorage.removeItem(KEY_RECSHA);
+    document.getElementById('syncmsg').textContent = '読み直し中…';
+    await sync({ cards: false }); viewSettings();
   };
 }
 
