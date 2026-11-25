@@ -282,6 +282,11 @@ const SE = {
     [1568, 2093, 2637, 3136, 4186].forEach((f, i) => tone(ac, { at: 0.3 + i * 0.05, from: f, len: 0.18, vol: 0.07 }));
     [523.25, 659.25, 783.99].forEach(f => tone(ac, { at: 0.16, from: f, len: 0.7, type: 'sine', vol: 0.08 }));
   },
+  // キーボードのキー：コッ（小さく短く）
+  tick() {
+    const ac = ctx(); if (!ac) return;
+    tone(ac, { from: 1900, to: 1300, len: 0.045, type: 'triangle', vol: 0.1 });
+  },
   // ×：ブブー
   wrong() {
     const ac = ctx(); if (!ac) return;
@@ -359,7 +364,7 @@ function setNav(name) {
   document.querySelectorAll('header a').forEach(a => a.classList.toggle('on', a.dataset.nav === name));
   $view.classList.toggle('wide', name === 'list');
 }
-function render(html, keepScroll) { $view.innerHTML = html; if (!keepScroll) window.scrollTo(0, 0); }
+function render(html, keepScroll) { document.body.classList.remove('kb-on'); $view.innerHTML = html; if (!keepScroll) window.scrollTo(0, 0); }
 // 1日ぶんの記録の表示：11/24 ○ ／ 11/24 ×2→○ ／ 11/24 ×3（○まだ）
 function dayChip(r) {
   const cls = r.x === 0 ? 'o' : r.o ? 'r' : 'x';
@@ -458,10 +463,39 @@ function bindTreeToggles() {
 }
 
 // ---------- 解く ----------
+// カードの項目に keys（正解にする言い方）があれば打ち込み型、なければ自分で ○× を押す形（2026-11-26〜）。
+// どちらも、カードが出てから「答え合わせ」（打ち込み型）か「答えを見る」までの秒数を sec に記録する。
+const SEC_LIMIT = 180; // これより長いのは、手を止めていたとみなして記録しない
 function startSession(label, list) {
   if (!list.length) return;
-  SESSION = { label, queue: list.map(c => ({ id: c.id, again: false })), pos: 0, shown: false, o: 0, x: 0, total: list.length, busy: false };
+  SESSION = { label, queue: list.map(c => ({ id: c.id, again: false })), pos: 0, o: 0, x: 0, total: list.length, busy: false };
+  beginCard(SESSION);
   location.hash = '#solve';
+}
+// 1枚ごとの状態を作り直す
+function beginCard(S) {
+  const item = S.queue[S.pos], c = item && byId(item.id);
+  S.shown = false; S.sec = null; S.t0 = performance.now(); S.hidAt = null;
+  S.typing = !!(c && typeable(c));
+  S.fixed = !!(c && c.show_count);
+  S.slots = S.typing ? (S.fixed ? c.items.map(() => '') : ['']) : [];
+  S.active = 0; S.buf = ''; S.graded = null; S.self = false;
+}
+function elapsedSec(S) {
+  const sec = Math.round((performance.now() - S.t0) / 1000);
+  return sec <= SEC_LIMIT ? sec : null;
+}
+// 画面を閉じていた時間は数えない
+document.addEventListener('visibilitychange', () => {
+  const S = SESSION; if (!S) return;
+  if (document.visibilityState === 'hidden') S.hidAt = performance.now();
+  else if (S.hidAt) { S.t0 += performance.now() - S.hidAt; S.hidAt = null; }
+});
+function itemsHTML(c, got) {
+  return `<ol class="items">${c.items.map((it, j) => {
+    const cls = got ? (got[j] >= 0 ? 'got' : 'missed') : '';
+    return `<li class="${cls}">${esc(it.text)}${it.basis ? `<span class="basis">${esc(it.basis)}</span>` : ''}</li>`;
+  }).join('')}</ol>`;
 }
 function viewSolve() {
   setNav('');
@@ -477,16 +511,39 @@ function viewSolve() {
     SESSION = null; if (online()) sync({ cards: false }); return;
   }
   const item = S.queue[S.pos], c = byId(item.id);
+  if (!c) { S.pos++; beginCard(S); return viewSolve(); } // カードが消えていたら飛ばす
   const s = state()[c.id];
   const n = c.show_count ? `（${c.items.length}つ）` : '';
-  render(`
+  const head = `
     <div class="progress"><span>${esc(S.label)}</span><span>のこり ${S.queue.length - S.pos}枚</span></div>
     <div class="qcard" id="qcard">
       <div class="meta">${esc(c.subject)} › ${esc(c.field)} › <b>${esc(c.topic)}</b>${item.again ? '<span class="retry-tag">やり直し</span>' : ''}</div>
       <div class="q">${esc(c.question)}<span class="n">${n}</span></div>
-      <div class="dates" style="margin-top:8px">${s.solved ? recentChips(s) : '<span class="muted">はじめて</span>'}</div>
+      <div class="dates" style="margin-top:8px">${s.solved ? recentChips(s) : '<span class="muted">はじめて</span>'}</div>`;
+  const foot = `<div class="subacts"><a href="#home" id="quit">やめる</a><a href="#card/${encodeURIComponent(c.id)}">このカードの記録・「直して」</a></div>`;
+  if (S.typing) {
+    const g = S.graded;
+    render(`${head}
+        <div class="slots" id="slots">${slotsHTML(S)}</div>
+        ${g ? `<div class="judge ${g.ok ? 'o' : 'x'}">${g.ok ? '○ 全部当たり！' : `× ${c.items.length - g.got.filter(i => i >= 0).length}つ足りない`}${S.sec != null ? `<span class="muted" style="font-weight:400;font-size:13px;margin-left:8px">${S.sec}秒</span>` : ''}</div>
+          ${itemsHTML(c, g.got)}${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}${hanreiNote(c)}` : ''}
+      </div>
+      ${g ? `<div class="answer-bar"><button class="next" id="bn">次へ</button>${g.ok ? '' : '<button class="self" id="bs" data-se="none">合ってた<small>○ にする</small></button>'}</div>
+        <div class="keys">次へ … Enter</div>` : `<div class="keys">ローマ字で打つ ・ 次の答え … Enter か スペース ・ 答え合わせ … Shift+Enter</div>`}
+      ${foot}
+      ${g ? '' : keyboardHTML(S)}`, !!g);
+    if (!g) { document.body.classList.add('kb-on'); bindKeyboard(); }
+    else {
+      document.getElementById('bn').onclick = () => nextTyped();
+      const bs = document.getElementById('bs');
+      if (bs) bs.onclick = () => { if (S.busy) return; S.self = true; SE.correct(); bigMark('o'); S.busy = true; setTimeout(() => { S.busy = false; nextTyped(); }, 450); };
+    }
+    document.getElementById('quit').onclick = () => { SESSION = null; };
+    return;
+  }
+  render(`${head}
       <div id="ans" ${S.shown ? '' : 'hidden'}>
-        <ol class="items">${c.items.map(it => `<li>${esc(it.text)}${it.basis ? `<span class="basis">${esc(it.basis)}</span>` : ''}</li>`).join('')}</ol>
+        ${itemsHTML(c)}
         ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
         ${hanreiNote(c)}
       </div>
@@ -497,39 +554,123 @@ function viewSolve() {
         : `<button class="primary big" id="show" style="margin-top:16px">答えを見る</button>`}
     </div>
     <div class="keys">${S.shown ? '○ … 1 か O ／ × … 2 か X' : '答えを見る … スペース'}</div>
-    <div class="subacts"><a href="#home" id="quit">やめる</a><a href="#card/${encodeURIComponent(c.id)}">このカードの記録・「直して」</a></div>
+    ${foot}
   `);
   const show = document.getElementById('show');
-  if (show) show.onclick = () => { S.shown = true; viewSolve(); };
+  if (show) show.onclick = () => showAnswer();
   const bo = document.getElementById('bo'), bx = document.getElementById('bx');
   if (bo) bo.onclick = () => answer('o');
   if (bx) bx.onclick = () => answer('x');
   document.getElementById('quit').onclick = () => { SESSION = null; };
 }
+function showAnswer() { const S = SESSION; if (!S || S.shown) return; S.sec = elapsedSec(S); S.shown = true; viewSolve(); }
+// 記録して次のカードへ（× のカードは最後にもう1回）
+function record(result, extra) {
+  const S = SESSION, item = S.queue[S.pos];
+  addEvent(Object.assign({ type: 'answer', card: item.id, result, mode: S.label }, S.sec != null ? { sec: S.sec } : {}, extra));
+  if (result === 'o') { if (!item.again) S.o++; }
+  else { if (!item.again) S.x++; S.queue.push({ id: item.id, again: true }); }
+}
+function advance() { const S = SESSION; S.pos++; beginCard(S); viewSolve(); }
+// 自分で ○× を押す形
 function answer(result) {
-  const S = SESSION; if (!S || !S.shown || S.busy) return;
-  const item = S.queue[S.pos];
-  addEvent({ type: 'answer', card: item.id, result, mode: S.label });
-  if (result === 'o') {
-    SE.correct(); bigMark('o');
-    if (!item.again) S.o++;
-  } else {
-    SE.wrong(); bigMark('x');
-    document.getElementById('qcard')?.classList.add('shake');
-    if (!item.again) S.x++;
-    S.queue.push({ id: item.id, again: true }); // ○ が付くまで、最後にもう1回
-  }
+  const S = SESSION; if (!S || S.typing || !S.shown || S.busy) return;
+  record(result);
+  if (result === 'o') { SE.correct(); bigMark('o'); }
+  else { SE.wrong(); bigMark('x'); document.getElementById('qcard')?.classList.add('shake'); }
   // 演出を少し見せてから次へ
   S.busy = true;
-  setTimeout(() => { S.busy = false; S.pos++; S.shown = false; viewSolve(); }, result === 'o' ? 450 : 380);
+  setTimeout(() => { S.busy = false; advance(); }, result === 'o' ? 450 : 380);
 }
+
+// ----- 打ち込み型 -----
+function slotsHTML(S) {
+  const g = S.graded;
+  return S.slots.map((t, i) => {
+    const on = !g && i === S.active;
+    const cls = g ? (g.hit[i] >= 0 ? 'hit' : 'miss') : on ? 'on' : '';
+    const mk = g ? `<span class="mk">${g.hit[i] >= 0 ? '○' : '×'}</span>` : '';
+    const to = g && g.hit[i] >= 0 ? `<span class="to">→ ${g.hit[i] + 1}</span>` : '';
+    return `<div class="slot ${cls}" data-slot="${i}"><span class="no">${i + 1}</span><span class="tx">${esc(t)}${on ? `<span class="buf">${esc(S.buf)}</span><span class="caret"></span>` : ''}</span>${to}${mk}</div>`;
+  }).join('');
+}
+function updateSlots() {
+  const el = document.getElementById('slots'); if (!el) return;
+  el.innerHTML = slotsHTML(SESSION);
+  el.querySelector('.slot.on')?.scrollIntoView({ block: 'nearest' });
+}
+const KB_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl-', 'zxcvbnm'];
+function keyboardHTML() {
+  const key = (k, label = k, cls = '') => `<button class="k ${cls}" data-k="${k}" data-se="none" tabindex="-1">${label}</button>`;
+  return `<div id="kb" aria-label="キーボード">
+    ${KB_ROWS.map((r, i) => `<div class="kb-row ${i === 0 ? 'num' : i === 3 ? 'r3' : ''}">${[...r].map(k => key(k, k === '-' ? 'ー' : k)).join('')}${i === 3 ? key('BS', '⌫', 'bs') : ''}</div>`).join('')}
+    <div class="kb-row">${key('NEXT', '次の答え', 'next')}${key('GO', '答え合わせ', 'go')}</div>
+  </div>`;
+}
+function bindKeyboard() {
+  const kb = document.getElementById('kb');
+  kb.addEventListener('pointerdown', e => {
+    const b = e.target.closest('.k'); if (!b) return;
+    e.preventDefault();
+    b.classList.add('pressed'); setTimeout(() => b.classList.remove('pressed'), 110);
+    if (b.dataset.k === 'GO') SE.pop(); else SE.tick();
+    typeKey(b.dataset.k);
+  });
+  document.getElementById('slots').addEventListener('click', e => {
+    const el = e.target.closest('.slot'); if (!el) return;
+    const S = SESSION; flushSlot(S); S.active = +el.dataset.slot; updateSlots();
+  });
+}
+function flushSlot(S) { S.slots[S.active] = flushRoma(S.slots[S.active], S.buf); S.buf = ''; }
+function typeKey(k) {
+  const S = SESSION; if (!S || !S.typing || S.graded) return;
+  if (k === 'GO') return gradeTyped();
+  if (k === 'BS') {
+    if (S.buf) S.buf = S.buf.slice(0, -1);
+    else if (S.slots[S.active]) S.slots[S.active] = [...S.slots[S.active]].slice(0, -1).join('');
+    else if (S.active > 0) { if (!S.fixed && S.active === S.slots.length - 1) S.slots.pop(); S.active--; }
+  } else if (k === 'NEXT') {
+    flushSlot(S);
+    if (S.active < S.slots.length - 1) S.active++;
+    else if (!S.fixed && S.slots[S.active] && S.slots.length < 20) { S.slots.push(''); S.active++; }
+  } else {
+    const r = feedRoma(S.slots[S.active], S.buf, k);
+    S.slots[S.active] = r.kana; S.buf = r.buf;
+  }
+  updateSlots();
+}
+function gradeTyped() {
+  const S = SESSION, c = byId(S.queue[S.pos].id);
+  flushSlot(S);
+  S.sec = elapsedSec(S);
+  S.graded = grade(c, S.slots.map(t => t.trim()));
+  if (S.graded.ok) { SE.correct(); bigMark('o'); }
+  else { SE.wrong(); bigMark('x'); }
+  viewSolve();
+  if (!S.graded.ok) document.getElementById('qcard')?.classList.add('shake');
+}
+function nextTyped() {
+  const S = SESSION; if (!S || !S.graded) return;
+  const result = S.graded.ok || S.self ? 'o' : 'x';
+  record(result, { typed: S.slots.slice(), judge: S.self ? 'self' : 'auto' });
+  advance();
+}
+
 document.addEventListener('keydown', e => {
   if (location.hash !== '#solve' || !SESSION || e.ctrlKey || e.metaKey || e.altKey) return;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(document.activeElement?.tagName)) return;
-  const k = e.key.toLowerCase();
-  if (!SESSION.shown && (k === ' ' || k === 'enter')) { e.preventDefault(); SE.pop(); SESSION.shown = true; viewSolve(); }
-  else if (SESSION.shown && (k === '1' || k === 'o')) { e.preventDefault(); answer('o'); }
-  else if (SESSION.shown && (k === '2' || k === 'x')) { e.preventDefault(); answer('x'); }
+  const S = SESSION, k = e.key.toLowerCase();
+  if (S.typing) {
+    if (S.graded) { if (k === 'enter' || k === ' ') { e.preventDefault(); if (!S.busy) nextTyped(); } return; }
+    if (k === 'enter' && (e.shiftKey || (S.fixed && S.active === S.slots.length - 1) || (!S.fixed && !S.slots[S.active] && !S.buf && S.slots.length > 1))) { e.preventDefault(); typeKey('GO'); }
+    else if (k === 'enter' || k === ' ') { e.preventDefault(); typeKey('NEXT'); }
+    else if (k === 'backspace') { e.preventDefault(); typeKey('BS'); }
+    else if (/^[a-z0-9\-']$/.test(k)) { e.preventDefault(); SE.tick(); typeKey(k); }
+    return;
+  }
+  if (!S.shown && (k === ' ' || k === 'enter')) { e.preventDefault(); SE.pop(); showAnswer(); }
+  else if (S.shown && (k === '1' || k === 'o')) { e.preventDefault(); answer('o'); }
+  else if (S.shown && (k === '2' || k === 'x')) { e.preventDefault(); answer('x'); }
 });
 
 // ---------- カードの記録 ----------

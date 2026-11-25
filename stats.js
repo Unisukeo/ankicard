@@ -1,7 +1,9 @@
 // 暗記カード：記録（できごとの列）から、カードごとの成績を出す。画面には触らない。node でも読める。
 //
 // できごとの形：
-//   {type:'answer', card, d:'YYYY-MM-DD', t, result:'o'|'x', mode}
+//   {type:'answer', card, d:'YYYY-MM-DD', t, result:'o'|'x', mode, sec?, typed?, judge?}
+//     sec：思い出すのにかかった秒数（180秒を超えたら付けない）。typed・judge：打ち込み型のとき、打った答えと、
+//     アプリの判定（'auto'）か「合ってた」を押した（'self'）か
 //   {type:'flag', card, d, t, on:true|false, memo}
 // 1日の記録は「○ が付くまでに × を押した回数」。その日 ○ が付いたら、そのあとの答えは数えない。
 
