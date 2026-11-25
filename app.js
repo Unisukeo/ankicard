@@ -5,7 +5,7 @@
 // 記録はまずこのブラウザの中（localStorage）にため、裏で送る。解いている間は待たない。
 // 2026-11-24：復習の間隔はやめた。カードごと・日ごとの「○ が付くまでに × を押した回数」で並べる。
 
-const LOCAL_CARD_FILES = ['見本.json'];
+const LOCAL_CARD_FILES = ['民法総則.json'];
 const LOCAL_CARD_DIR = '../data/cards/';
 const DEFAULT_REPO = 'Unisukeo/ankicard-data';
 const KEY_EVENTS = 'ankicard.events';
@@ -55,6 +55,13 @@ function addEvent(e) {
 function state() { return replay(CARDS, events()); }
 
 // ---------- カード ----------
+// 判例の印（カードの hanrei：{ status: "確認済み"|"未確認", cases: [...] }）
+function hanreiNote(c) {
+  const h = c.hanrei; if (!h) return '';
+  const ok = h.status === '確認済み';
+  const cases = (h.cases || []).map(esc).join('・');
+  return `<div class="hanrei ${ok ? 'ok' : 'unchecked'}"><b>判例</b>${cases ? ` ${cases}` : ''}<span class="hs">${ok ? 'ゆにすけが確認済み' : 'AI が照らした（未確認）'}</span></div>`;
+}
 function cardsFromDecks(decks) {
   const all = [];
   for (const name of Object.keys(decks).sort()) {
@@ -481,6 +488,7 @@ function viewSolve() {
       <div id="ans" ${S.shown ? '' : 'hidden'}>
         <ol class="items">${c.items.map(it => `<li>${esc(it.text)}${it.basis ? `<span class="basis">${esc(it.basis)}</span>` : ''}</li>`).join('')}</ol>
         ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
+        ${hanreiNote(c)}
       </div>
     </div>
     <div id="bar">
@@ -539,6 +547,7 @@ function viewCard(id) {
       <div class="q">${esc(c.question)}</div>
       <ol class="items">${c.items.map(it => `<li>${esc(it.text)}${it.basis ? `<span class="basis">${esc(it.basis)}</span>` : ''}</li>`).join('')}</ol>
       ${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}
+        ${hanreiNote(c)}
     </div>
     <h2>記録</h2>
     <div class="panel">

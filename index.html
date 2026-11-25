@@ -81,6 +81,10 @@ ol.items { margin: 14px 0 0; padding: 14px 0 0 1.6em; border-top: 1px dashed var
 ol.items li { margin-bottom: 6px; }
 ol.items .basis { color: var(--muted); font-size: 13px; margin-left: 6px; white-space: nowrap; }
 .memo { margin-top: 10px; background: var(--wait-soft); border-radius: 8px; padding: 8px 12px; font-size: 14px; }
+.hanrei { margin-top: 10px; border-radius: 8px; padding: 6px 12px; font-size: 13px; border: 1px solid var(--line); }
+.hanrei .hs { display: inline-block; margin-left: 8px; font-size: 12px; font-weight: 700; padding: 0 8px; border-radius: 999px; }
+.hanrei.unchecked .hs { background: var(--fix-soft); color: var(--fix); }
+.hanrei.ok .hs { background: var(--ok-soft, #e3f2e8); color: var(--ok, #2e7d4f); }
 .answer-bar { display: flex; gap: 12px; margin-top: 16px; }
 .answer-bar button { flex: 1; font-size: 34px; font-weight: 700; padding: 10px 0; line-height: 1.2; }
 .answer-bar .o { background: var(--ok-soft); border-color: var(--ok); color: var(--ok); }
