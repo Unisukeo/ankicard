@@ -267,15 +267,82 @@ function tone(ac, { at = 0, from, to = from, len = 0.15, type = 'sine', vol = 0.
   g.gain.exponentialRampToValueAtTime(0.0001, t0 + len);
   o.connect(g).connect(ac.destination); o.start(t0); o.stop(t0 + len + 0.03);
 }
+// 効果音ラボ（https://soundeffect-lab.info/ ）の音（2026-11-26 ぐーぐるが選んだ）。
+// 規約で再配布が禁止なので、音のファイルは公開のこのリポジトリには置かず、非公開の ankicard-data の se/ に置く。
+// 合い鍵で読んで、この端末の Cache に取っておく（電波がなくても鳴る）。読めないときは、下の作った音で鳴らす。
+const SE_FILES = {
+  tick: 'cursor9',        // キーを打つ：カーソル移動9
+  pop: 'decision2',       // ボタン：決定ボタンを押す2
+  big: 'decision3',       // 大きな選択（解き始める・保存して同期）：決定ボタンを押す3
+  check: 'news-title3',   // 答え合わせ：ニュースタイトル表示3
+  correct: 'correct3',    // ○：クイズ正解3
+  wrong: 'incorrect2',    // ×：クイズ不正解2
+  finish: 'levelup1',     // 解き終わった：レベルアップ
+};
+const SE_VOL = { tick: 0.5, pop: 0.6, big: 0.7, check: 0.7, correct: 0.8, wrong: 0.8, finish: 0.8 };
+const SE_CACHE = 'ankicard-se';
+const KEY_SE = 'ankicard.se'; // 音の名前 → sha（取っておいたものを探す）
+const SE_BUF = {};            // 音の名前 → { buf, off }（off：頭の無音を飛ばす秒数）
+async function loadSE() {
+  try {
+    const ac = audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    const map = loadJSON(KEY_SE, {});
+    let list = null;
+    if (online()) { try { list = await listDir('se'); } catch { /* 電波がない：取っておいたものを使う */ } }
+    const cache = 'caches' in window ? await caches.open(SE_CACHE) : null;
+    for (const [name, file] of Object.entries(SE_FILES)) {
+      try {
+        let data = null;
+        if (online()) {
+          const f = list && list.find(x => x.name === `${file}.mp3`);
+          const sha = f ? f.sha : map[file];
+          if (!sha) continue;
+          const key = `se-cache/${sha}.mp3`;
+          const hit = cache && await cache.match(key);
+          if (hit) data = await hit.arrayBuffer();
+          else if (f) {
+            const res = await gh(`contents/se/${encodeURIComponent(f.name)}`, { raw: true });
+            if (!res.ok) continue;
+            data = await res.arrayBuffer();
+            if (cache) await cache.put(key, new Response(data.slice(0), { headers: { 'Content-Type': 'audio/mpeg' } }));
+            map[file] = sha;
+          }
+        } else if (/^(localhost|127\.0\.0\.1)$/.test(location.hostname)) {
+          const res = await fetch(`../data/se/${file}.mp3`); // PC で試すとき
+          if (res.ok) data = await res.arrayBuffer();
+        }
+        if (!data) continue;
+        const buf = await new Promise((ok, ng) => ac.decodeAudioData(data, ok, ng));
+        // 頭の無音を飛ばす（押してすぐ鳴るように）
+        const ch = buf.getChannelData(0);
+        let i = 0; while (i < ch.length && Math.abs(ch[i]) < 0.01) i++;
+        SE_BUF[name] = { buf, off: i < ch.length ? Math.max(0, i / buf.sampleRate - 0.003) : 0 };
+      } catch { /* この音だけ作った音で鳴らす */ }
+    }
+    localStorage.setItem(KEY_SE, JSON.stringify(map));
+  } catch { /* 音がなくても動く */ }
+}
+// 取ってきた音を鳴らす。なければ false
+function playSE(name) {
+  const ac = ctx(), b = SE_BUF[name]; if (!ac || !b) return false;
+  const s = ac.createBufferSource(), g = ac.createGain();
+  s.buffer = b.buf; g.gain.value = SE_VOL[name] ?? 0.7;
+  s.connect(g).connect(ac.destination); s.start(0, b.off);
+  return { s, g, len: b.buf.duration - b.off };
+}
 const SE = {
   // さわったとき：ポコン
   pop() {
+    if (playSE('pop')) return;
     const ac = ctx(); if (!ac) return;
     tone(ac, { from: 1100, to: 520, len: 0.09, vol: 0.22 });
     tone(ac, { at: 0.045, from: 700, to: 380, len: 0.11, vol: 0.16 });
   },
+  // 大きな選択（解き始める など）
+  big() { if (!playSE('big')) SE.pop(); },
   // ○：ピンポーン＋キラキラ
   correct() {
+    if (playSE('correct')) return;
     const ac = ctx(); if (!ac) return;
     tone(ac, { from: 1318.5, len: 0.35, type: 'triangle', vol: 0.3 });
     tone(ac, { at: 0.16, from: 1046.5, len: 0.6, type: 'triangle', vol: 0.3 });
@@ -284,21 +351,32 @@ const SE = {
   },
   // キーボードのキー：コッ（小さく短く）
   tick() {
+    if (playSE('tick')) return;
     const ac = ctx(); if (!ac) return;
     tone(ac, { from: 1900, to: 1300, len: 0.045, type: 'triangle', vol: 0.1 });
   },
   // ×：ブブー
   wrong() {
+    if (playSE('wrong')) return;
     const ac = ctx(); if (!ac) return;
     tone(ac, { from: 180, len: 0.16, type: 'square', vol: 0.08 });
     tone(ac, { at: 0.2, from: 150, len: 0.32, type: 'square', vol: 0.08 });
   },
+  // 答え合わせ：鳴らした音を返す（○× を出すときに小さくして止める）
+  check() { return playSE('check') || (SE.pop(), null); },
+  // 解き終わった
+  finish() { if (!playSE('finish')) SE.correct(); },
 };
-// ボタン・リンク・チップにさわったら「ポコン」（○・× のボタンは別の音）
+// 鳴っている音を、すっと小さくして止める
+function fadeOut(p, sec = 0.08) {
+  if (!p || !audioCtx) return;
+  try { const t = audioCtx.currentTime; p.g.gain.setValueAtTime(p.g.gain.value, t); p.g.gain.linearRampToValueAtTime(0, t + sec); p.s.stop(t + sec + 0.02); } catch { /* もう止まっている */ }
+}
+// ボタン・リンク・チップにさわったら「ポコン」。data-se="big" は大きな選択の音、"none" は鳴らさない（○・× などは別の音）
 document.addEventListener('pointerdown', e => {
   const el = e.target.closest('button, a, summary, select, input[type=checkbox]');
   if (!el || el.dataset.se === 'none') return;
-  SE.pop();
+  if (el.dataset.se === 'big') SE.big(); else SE.pop();
 }, true);
 
 // ---------- Clawd（アイコンと同じ絵。座標は 512×512） ----------
@@ -406,12 +484,12 @@ function viewHome() {
       <div class="count"><b>${fresh.length}</b><span>まだ解いていない</span></div>
       <div class="count"><b>${doneToday}</b><span>今日 ○</span></div>
     </div>
-    <button class="primary big" id="attn" ${solved.length ? '' : 'disabled'}>要注意の順に解く<small>${Math.min(set.perSession, solved.length)}枚</small></button>
+    <button class="primary big" id="attn" data-se="big" ${solved.length ? '' : 'disabled'}>要注意の順に解く<small>${Math.min(set.perSession, solved.length)}枚</small></button>
     ${top.length ? `<div class="toplist">${top.map(c => `<a href="#card/${encodeURIComponent(c.id)}">${scoreBadge(st[c.id])}<span class="tp">${esc(c.topic)}</span></a>`).join('')}</div>` : ''}
-    <button class="big" id="fresh" ${fresh.length ? '' : 'disabled'} style="margin-top:10px">まだ解いていないのを解く<small>${Math.min(set.perSession, fresh.length)}枚</small></button>
+    <button class="big" id="fresh" data-se="big" ${fresh.length ? '' : 'disabled'} style="margin-top:10px">まだ解いていないのを解く<small>${Math.min(set.perSession, fresh.length)}枚</small></button>
     <h2>分野から選ぶ</h2>
     ${fieldTree(st)}
-    ${flagged.length ? `<button class="chip" id="flagged" style="margin-top:4px">「直して」を付けたカードを解く<small>${flagged.length}</small></button>` : ''}
+    ${flagged.length ? `<button class="chip" id="flagged" data-se="big" style="margin-top:4px">「直して」を付けたカードを解く<small>${flagged.length}</small></button>` : ''}
     <p class="muted">カード ${CARDS.length}枚 ・ 1回に ${set.perSession}枚まで ・ 今日 ${md(today())}</p>
   `);
   document.getElementById('attn').onclick = () => startSession('要注意の順', solved.slice(0, set.perSession));
@@ -444,7 +522,7 @@ function fieldTree(st) {
         return `<details class="fld" data-key="${esc(fkey)}" ${OPEN.has(fkey) ? 'open' : ''}>
           <summary><span class="nm">${esc(field)}</span><span class="muted">${cards.length}</span>${fsum ? `<span class="score hot">×${fsum}</span>` : ''}</summary>
           <ul class="topics">${sorted.map(c => `<li><a href="#card/${encodeURIComponent(c.id)}">${scoreBadge(st[c.id])}<span class="tp">${esc(c.topic)}</span></a><div class="dates">${recentChips(st[c.id])}</div></li>`).join('')}</ul>
-          <button class="solve-field" data-subject="${esc(subj)}" data-field="${esc(field)}">「${esc(field)}」を解く（${cards.length}枚）</button>
+          <button class="solve-field" data-se="big" data-subject="${esc(subj)}" data-field="${esc(field)}">「${esc(field)}」を解く（${cards.length}枚）</button>
         </details>`;
       }).join('')}
     </details>`;
@@ -508,6 +586,7 @@ function viewSolve() {
       <p class="muted">${S.total}枚 ・ 1回目で ○ ${S.o}枚 ・ × のあと やり直し ${S.x}枚</p>
       <a class="btn primary" href="#home">ホームへ</a>
     </div>`);
+    SE.finish();
     SESSION = null; if (online()) sync({ cards: false }); return;
   }
   const item = S.queue[S.pos], c = byId(item.id);
@@ -613,7 +692,7 @@ function bindKeyboard() {
     const b = e.target.closest('.k'); if (!b) return;
     e.preventDefault();
     b.classList.add('pressed'); setTimeout(() => b.classList.remove('pressed'), 110);
-    if (b.dataset.k === 'GO') SE.pop(); else SE.tick();
+    if (b.dataset.k !== 'GO') SE.tick();
     typeKey(b.dataset.k);
   });
   document.getElementById('slots').addEventListener('click', e => {
@@ -623,7 +702,7 @@ function bindKeyboard() {
 }
 function flushSlot(S) { S.slots[S.active] = flushRoma(S.slots[S.active], S.buf); S.buf = ''; }
 function typeKey(k) {
-  const S = SESSION; if (!S || !S.typing || S.graded) return;
+  const S = SESSION; if (!S || !S.typing || S.graded || S.busy) return;
   if (k === 'GO') return gradeTyped();
   if (k === 'BS') {
     if (S.buf) S.buf = S.buf.slice(0, -1);
@@ -639,15 +718,27 @@ function typeKey(k) {
   }
   updateSlots();
 }
+const CHECK_WAIT = 0.9; // 答え合わせの音を聞かせてから ○× を出すまでの秒数（音がもっと短ければその長さ）
 function gradeTyped() {
-  const S = SESSION, c = byId(S.queue[S.pos].id);
-  flushSlot(S);
+  const S = SESSION; if (S.busy) return;
+  const c = byId(S.queue[S.pos].id);
+  flushSlot(S); updateSlots();
   S.sec = elapsedSec(S);
-  S.graded = grade(c, S.slots.map(t => t.trim()));
-  if (S.graded.ok) { SE.correct(); bigMark('o'); }
-  else { SE.wrong(); bigMark('x'); }
-  viewSolve();
-  if (!S.graded.ok) document.getElementById('qcard')?.classList.add('shake');
+  const g = grade(c, S.slots.map(t => t.trim()));
+  // 答え合わせの音 → ドキドキの間 → ○×
+  const p = SE.check();
+  const wait = p ? Math.min(p.len, CHECK_WAIT) : 0;
+  S.busy = true;
+  document.getElementById('kb')?.classList.add('wait');
+  setTimeout(() => {
+    S.busy = false;
+    fadeOut(p);
+    S.graded = g;
+    if (g.ok) { SE.correct(); bigMark('o'); }
+    else { SE.wrong(); bigMark('x'); }
+    viewSolve();
+    if (!g.ok) document.getElementById('qcard')?.classList.add('shake');
+  }, wait * 1000);
 }
 function nextTyped() {
   const S = SESSION; if (!S || !S.graded) return;
@@ -665,7 +756,7 @@ document.addEventListener('keydown', e => {
     if (k === 'enter' && (e.shiftKey || (S.fixed && S.active === S.slots.length - 1) || (!S.fixed && !S.slots[S.active] && !S.buf && S.slots.length > 1))) { e.preventDefault(); typeKey('GO'); }
     else if (k === 'enter' || k === ' ') { e.preventDefault(); typeKey('NEXT'); }
     else if (k === 'backspace') { e.preventDefault(); typeKey('BS'); }
-    else if (/^[a-z0-9\-']$/.test(k)) { e.preventDefault(); SE.tick(); typeKey(k); }
+    else if (/^[a-z0-9\-']$/.test(k)) { e.preventDefault(); if (!S.busy) SE.tick(); typeKey(k); }
     return;
   }
   if (!S.shown && (k === ' ' || k === 'enter')) { e.preventDefault(); SE.pop(); showAnswer(); }
@@ -761,14 +852,15 @@ function viewSettings() {
     <div class="panel">
       <div class="row"><label>1回に解く枚数 <input type="number" id="ps" min="1" max="500" value="${s.perSession}" style="width:5em"> 枚まで</label><span class="muted">要注意の順・まだ解いていない、のとき</span></div>
       <div class="row"><label><input type="checkbox" id="snd" ${s.sound ? 'checked' : ''}> 音を出す（さわったとき・○・×）</label></div>
-      <div class="row"><button id="t1" data-se="none">○ の音と演出</button><button id="t2" data-se="none">× の音</button><button id="t3">ポコン</button></div>
+      <div class="row" style="flex-wrap:wrap"><button id="t1" data-se="none">○ と演出</button><button id="t2" data-se="none">×</button><button id="t3" data-se="none">キー</button><button id="t4">ボタン</button><button id="t5" data-se="big">大きな選択</button><button id="t6" data-se="none">答え合わせ</button><button id="t7" data-se="none">解き終わり</button></div>
+      <p class="muted" style="margin:0">音：効果音ラボ（${Object.keys(SE_BUF).length}/${Object.keys(SE_FILES).length} 読めた。読めない音は作った音で鳴る）</p>
       <div class="row"><label>この端末の名前 <input type="text" id="dev" value="${esc(s.device)}" style="width:8em"></label><span class="muted">記録のファイル名に使う（例：PC、iPhone）</span></div>
     </div>
     <h2>合い鍵（GitHub）</h2>
     <div class="panel">
       <div class="row"><label>リポジトリ <input type="text" id="repo" value="${esc(s.repo)}" style="width:16em" autocapitalize="off" autocorrect="off" spellcheck="false"></label></div>
       <div class="row"><label>合い鍵 <input type="password" id="tok" value="${esc(s.token)}" placeholder="github_pat_…" style="width:16em" autocomplete="off" autocapitalize="off" spellcheck="false"></label></div>
-      <div class="row"><button class="primary" id="savetok">保存して同期</button><button id="syncnow" ${s.token ? '' : 'disabled'}>今すぐ同期</button></div>
+      <div class="row"><button class="primary" id="savetok" data-se="big">保存して同期</button><button id="syncnow" ${s.token ? '' : 'disabled'}>今すぐ同期</button></div>
       <p class="muted" id="syncmsg" style="margin:4px 0 0">${s.token ? esc(SYNC.state === 'err' ? `同期できない：${SYNC.msg}` : SYNC.at ? `最後に同期：${SYNC.at.toLocaleString()}` : '') : '合い鍵がないときは、このブラウザの中だけで動く（PC で試す形）'}</p>
     </div>
     <h2>記録</h2>
@@ -801,6 +893,9 @@ function viewSettings() {
   document.getElementById('syncnow').onclick = async () => { document.getElementById('syncmsg').textContent = '同期中…'; await sync(); after(); };
   document.getElementById('t1').onclick = () => { SE.correct(); bigMark('o'); };
   document.getElementById('t2').onclick = () => { SE.wrong(); bigMark('x'); };
+  document.getElementById('t3').onclick = () => SE.tick();
+  document.getElementById('t6').onclick = () => SE.check();
+  document.getElementById('t7').onclick = () => SE.finish();
   document.getElementById('export').onclick = () => {
     const blob = new Blob([ev.map(e => JSON.stringify(e)).join('\n') + (ev.length ? '\n' : '')], { type: 'application/x-ndjson' });
     const a = document.createElement('a');
@@ -837,8 +932,10 @@ window.addEventListener('hashchange', route);
   await loadCards();
   route();
   showSync();
+  if (!online()) loadSE();
   if (online()) {
     await sync();
+    loadSE(); // 音は合い鍵で非公開のリポジトリから（取っておいたものがあれば、それを使う）
     const h = location.hash;
     if (!SESSION && (h === '' || h === '#home' || h === '#list')) route(); // 新しいカード・記録で出し直す
   }
