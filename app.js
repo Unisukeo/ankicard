@@ -60,7 +60,7 @@ function hanreiNote(c) {
   const h = c.hanrei; if (!h) return '';
   const ok = h.status === '確認済み';
   const cases = (h.cases || []).map(esc).join('・');
-  return `<div class="hanrei ${ok ? 'ok' : 'unchecked'}"><b>判例</b>${cases ? ` ${cases}` : ''}<span class="hs">${ok ? 'ゆにすけが確認済み' : 'AI が照らした（未確認）'}</span></div>`;
+  return `<div class="hanrei ${ok ? 'ok' : 'unchecked'}"><b>判例</b>${cases ? ` ${cases}` : ''}<span class="hs">${ok ? 'ぐーぐるが確認済み' : 'AI が照らした（未確認）'}</span></div>`;
 }
 function cardsFromDecks(decks) {
   const all = [];
