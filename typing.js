@@ -5,6 +5,7 @@
 // カードの形：items[] の全部に yomi（その項目の答えの読み。ひらがな。言いかえも並べられる）があると、
 //   そのカードは打ち込み型で出る。どの項目から打ってもよい。読みを打ち終えたら、その項目を見つけたことになる。
 //   合わない字はブッで入らず、ミスに数える。ミスが MISS_MAX 回を超えたら ×。
+//   ただし、合うキーの隣のキー（指のすべり）はミスに数えない。同じところで何回まちがえても、ミスは1回（2026-11-26〜）。
 //   読みが、ほかの項目の読みの頭と同じとき（りこう／りこうのせいきゅう）は、次の答えを打ち始めるか「確定」で決まる。
 //   同じ項目の中の長い読み（5ねん／5ねんかん）は、短いほうで見つけたことにして、続けて打った残りは受け流す。
 
@@ -95,7 +96,7 @@ function typeable(card) { return !!(card.items && card.items.length && card.item
 function newGame(card) {
   return {
     yomi: card.items.map(it => it.yomi.map(normKana).filter(Boolean)),
-    found: card.items.map(() => false), order: [], kana: '', buf: '', miss: 0, swallowN: false, tail: null,
+    found: card.items.map(() => false), order: [], kana: '', buf: '', miss: 0, missPos: null, swallowN: false, tail: null,
   };
 }
 // まだ見つけていない項目の読み：[{ j, r }]
@@ -117,7 +118,8 @@ function take(g, j, viaN) {
 const done = g => g.found.every(Boolean);
 const lost = g => g.miss > MISS_MAX;
 
-// 1文字打つ。返すのは起きたことの配列：{ ev: 'ok' } ／ { ev: 'miss' } ／ { ev: 'found', j }
+// 1文字打つ。返すのは起きたことの配列：{ ev: 'ok' } ／ { ev: 'found', j } ／ { ev: 'miss' }（again：同じところの2回目からで、数えない）
+//   ／ { ev: 'slip' }（合うキーの隣を押した。字は入らず、ミスにも数えない）
 function press(g, ch) {
   ch = String(ch).toLowerCase();
   if (g.swallowN) { g.swallowN = false; if (ch === 'n') return [{ ev: 'ok' }]; } // 「ん」を nn と打った2つ目
@@ -145,8 +147,35 @@ function press(g, ch) {
   // 合わない字。今までのぶんがちょうど読みなら、それを見つけたことにして、この字を次の答えの頭として打ち直す
   const hit = (g.kana || g.buf) && exactHit(g, g.kana, g.buf);
   if (hit) { take(g, hit.j, false); return [{ ev: 'found', j: hit.j }, ...(done(g) ? [] : press(g, ch))]; }
-  g.miss++;
+  // 指のすべり：押したキーが、合っているキーのどれかの隣なら、ミスに数えない（字は入らない）
+  if (validKeys(g).some(k => nearKey(k, ch))) return [{ ev: 'slip' }];
+  // 同じところで何回まちがえても、ミスは1回
+  const pos = `${g.order.length}|${g.kana}|${g.buf}`;
+  if (g.missPos === pos) return [{ ev: 'miss', again: true }];
+  g.missPos = pos; g.miss++;
   return [{ ev: 'miss' }];
+}
+// 今打てば合うキー
+const ALL_KEYS = 'abcdefghijklmnopqrstuvwxyz0123456789-';
+function validKeys(g) {
+  return [...ALL_KEYS].filter(k => { const c = feedRoma(g.kana, g.buf, k); return (c.kana !== g.kana || c.buf !== g.buf) && anyValid(g, c.kana, c.buf); });
+}
+// アプリの中のキーボードでの、キーの真ん中（キー1つの幅を1とする）。
+// 上の段 q〜p と中の段 a〜ー はそろえて並べ、下の段 z〜m は ⌫ と一緒に少しせまく並ぶ（index.html の #kb と合わせる）。
+// 数字は、切り替えたとき上の段の場所に出る。ふつうのキーボードの数字の段とも同じ向きになるよう、上の段のさらに上にあるとみる
+const KEY_POS = (() => {
+  const p = {};
+  [...'1234567890'].forEach((k, i) => (p[k] = [i + 0.5, -1]));
+  [...'qwertyuiop'].forEach((k, i) => (p[k] = [i + 0.5, 0]));
+  [...'asdfghjkl-'].forEach((k, i) => (p[k] = [i + 0.5, 1]));
+  const u = 9.2 / 8.5; // 下の段：はしを 0.4 ずつあけて、7つ＋⌫（1.5）
+  [...'zxcvbnm'].forEach((k, i) => (p[k] = [0.4 + u * (i + 0.5), 2]));
+  return p;
+})();
+function nearKey(a, b) {
+  const p = KEY_POS[a], q = KEY_POS[b];
+  if (!p || !q || a === b) return false;
+  return Math.abs(p[1] - q[1]) <= 1 && Math.abs(p[0] - q[0]) <= 1.15;
 }
 // 確定（スペース）：今までのぶんがちょうど読みなら見つけたことにする
 function commit(g) {
@@ -161,4 +190,4 @@ function backspace(g) {
   else if (g.kana) g.kana = [...g.kana].slice(0, -1).join('');
 }
 
-if (typeof module !== 'undefined') module.exports = { feedRoma, flushRoma, normKana, typeable, newGame, press, commit, backspace, done, lost, MISS_MAX };
+if (typeof module !== 'undefined') module.exports = { nearKey, validKeys, feedRoma, flushRoma, normKana, typeable, newGame, press, commit, backspace, done, lost, MISS_MAX };

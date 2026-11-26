@@ -368,6 +368,11 @@ const SE = {
     const ac = ctx(); if (!ac) return;
     tone(ac, { from: 150, to: 120, len: 0.12, type: 'square', vol: 0.07 });
   },
+  // 指のすべり（合うキーの隣）：コツ（小さく鈍く。ミスには数えない）
+  slip() {
+    const ac = ctx(); if (!ac) return;
+    tone(ac, { from: 520, to: 420, len: 0.05, type: 'triangle', vol: 0.09 });
+  },
   // 見つけた・答え合わせ：鳴らした音を返す（○× を出すときに小さくして止める）
   check() { return playSE('check') || (SE.pop(), null); },
   // 解き終わった
@@ -670,6 +675,7 @@ function answer(result) {
 // ----- 打ち込み型（タイピングゲーム型） -----
 // 1文字打つたびに、まだ見つけていない答えのどれかの頭と合っているかを見る（typing.js）。
 // 合えばコッ、合わなければブッで字は入らずミス1回。読みを打ち終えたらその行が開く。
+// 合うキーの隣を押したとき（指のすべり）はコツと鳴るだけでミスに数えない。同じところのまちがいは1回だけ数える。
 // 全部見つけたら ○、ミスが MISS_MAX を超えるか「わからない」で ×。
 function playHTML(S, c) {
   const G = S.game, n = G.order.length;
@@ -689,35 +695,42 @@ function updatePlay(shake) {
   S.flash = null;
   if (shake) { const t = document.getElementById('tline'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake'); }
 }
-const KB_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl-', 'zxcvbnm'];
-function keyboardHTML() {
+// キーボード：文字の段は3つ（大きめのキー）。数字は「123」で上の段と入れかえる（数字を打つのは「5ねん」くらい）
+const KB_ROWS = ['qwertyuiop', 'asdfghjkl-', 'zxcvbnm'];
+let KB_NUM = false;
+function keyboardHTML() { return `<div id="kb" aria-label="キーボード">${kbRows()}</div>`; }
+function kbRows() {
   const key = (k, label = k, cls = '') => `<button class="k ${cls}" data-k="${k}" data-se="none" tabindex="-1">${label}</button>`;
-  return `<div id="kb" aria-label="キーボード">
-    ${KB_ROWS.map((r, i) => `<div class="kb-row ${i === 0 ? 'num' : i === 3 ? 'r3' : ''}">${[...r].map(k => key(k, k === '-' ? 'ー' : k)).join('')}${i === 3 ? key('BS', '⌫', 'bs') : ''}</div>`).join('')}
-    <div class="kb-row">${key('GIVEUP', 'わからない', 'giveup')}${key('SPACE', '確定', 'next')}</div>
-  </div>`;
+  const rows = KB_ROWS.slice(); if (KB_NUM) rows[0] = '1234567890';
+  return `${rows.map((r, i) => `<div class="kb-row ${i === 2 ? 'r3' : ''}">${[...r].map(k => key(k, k === '-' ? 'ー' : k)).join('')}${i === 2 ? key('BS', '⌫', 'bs') : ''}</div>`).join('')}
+    <div class="kb-row bottom">${key('NUM', KB_NUM ? 'abc' : '123', 'num')}${key('GIVEUP', 'わからない', 'giveup')}${key('SPACE', '確定', 'next')}</div>`;
 }
 function bindKeyboard() {
-  document.getElementById('kb').addEventListener('pointerdown', e => {
+  const kb = document.getElementById('kb');
+  kb.addEventListener('pointerdown', e => {
     const b = e.target.closest('.k'); if (!b) return;
     e.preventDefault();
-    b.classList.add('pressed'); setTimeout(() => b.classList.remove('pressed'), 110);
-    typeKey(b.dataset.k);
+    if (b.dataset.k === 'NUM') { SE.tick(); KB_NUM = !KB_NUM; kb.innerHTML = kbRows(); return; }
+    const evs = typeKey(b.dataset.k) || [];
+    const cls = evs.some(x => x.ev === 'slip') ? 'slipped' : 'pressed';
+    b.classList.add(cls); setTimeout(() => b.classList.remove(cls), cls === 'slipped' ? 260 : 110);
   });
 }
 function typeKey(k) {
   const S = SESSION; if (!S || !S.typing || S.graded || S.busy) return;
   const G = S.game;
-  if (k === 'GIVEUP') { S.giveup = true; return finishTyped(false); }
-  if (k === 'BS') { SE.tick(); backspace(G); return updatePlay(); }
+  if (k === 'GIVEUP') { S.giveup = true; finishTyped(false); return; }
+  if (k === 'BS') { SE.tick(); backspace(G); updatePlay(); return; }
   const evs = k === 'SPACE' ? commit(G) : press(G, k);
-  const found = evs.filter(e => e.ev === 'found'), miss = evs.some(e => e.ev === 'miss');
-  if (done(G)) return finishTyped(true);
-  if (lost(G)) return finishTyped(false);
+  const found = evs.filter(e => e.ev === 'found'), miss = evs.find(e => e.ev === 'miss'), slip = evs.some(e => e.ev === 'slip');
+  if (done(G)) { finishTyped(true); return evs; }
+  if (lost(G)) { finishTyped(false); return evs; }
   if (found.length) { S.flash = found[found.length - 1].j; fadeOut(SE.check(), 0.6); }
   else if (miss) SE.miss();
+  else if (slip) SE.slip();
   else if (k !== 'SPACE') SE.tick();
-  updatePlay(miss);
+  updatePlay(miss && !miss.again);
+  return evs;
 }
 // ○× が決まった
 function finishTyped(ok) {
