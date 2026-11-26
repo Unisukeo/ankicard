@@ -362,7 +362,13 @@ const SE = {
     tone(ac, { from: 180, len: 0.16, type: 'square', vol: 0.08 });
     tone(ac, { at: 0.2, from: 150, len: 0.32, type: 'square', vol: 0.08 });
   },
-  // 答え合わせ：鳴らした音を返す（○× を出すときに小さくして止める）
+  // 打ちまちがい：ブッ（短く低く）
+  miss() {
+    if (playSE('miss')) return;
+    const ac = ctx(); if (!ac) return;
+    tone(ac, { from: 150, to: 120, len: 0.12, type: 'square', vol: 0.07 });
+  },
+  // 見つけた・答え合わせ：鳴らした音を返す（○× を出すときに小さくして止める）
   check() { return playSE('check') || (SE.pop(), null); },
   // 解き終わった
   finish() { if (!playSE('finish')) SE.correct(); },
@@ -541,8 +547,8 @@ function bindTreeToggles() {
 }
 
 // ---------- 解く ----------
-// カードの項目に keys（正解にする言い方）があれば打ち込み型、なければ自分で ○× を押す形（2026-11-26〜）。
-// どちらも、カードが出てから「答え合わせ」（打ち込み型）か「答えを見る」までの秒数を sec に記録する。
+// カードの項目に yomi（答えの読み）があれば打ち込み型（タイピングゲーム型）、なければ自分で ○× を押す形（2026-11-26〜）。
+// どちらも、カードが出てから ○× が決まる（打ち込み型）か「答えを見る」までの秒数を sec に記録する。
 const SEC_LIMIT = 180; // これより長いのは、手を止めていたとみなして記録しない
 function startSession(label, list) {
   if (!list.length) return;
@@ -555,9 +561,8 @@ function beginCard(S) {
   const item = S.queue[S.pos], c = item && byId(item.id);
   S.shown = false; S.sec = null; S.t0 = performance.now(); S.hidAt = null;
   S.typing = !!(c && typeable(c));
-  S.fixed = !!(c && c.show_count);
-  S.slots = S.typing ? (S.fixed ? c.items.map(() => '') : ['']) : [];
-  S.active = 0; S.buf = ''; S.graded = null; S.self = false;
+  S.game = S.typing ? newGame(c) : null;
+  S.graded = null; S.self = false; S.giveup = false; S.flash = null;
 }
 function elapsedSec(S) {
   const sec = Math.round((performance.now() - S.t0) / 1000);
@@ -603,14 +608,14 @@ function viewSolve() {
   if (S.typing) {
     const g = S.graded;
     render(`${head}
-        <div class="slots" id="slots">${slotsHTML(S)}</div>
-        ${g ? `<div class="judge ${g.ok ? 'o' : 'x'}">${g.ok ? '○ 全部当たり！' : `× ${c.items.length - g.got.filter(i => i >= 0).length}つ足りない`}${S.sec != null ? `<span class="muted" style="font-weight:400;font-size:13px;margin-left:8px">${S.sec}秒</span>` : ''}</div>
-          ${itemsHTML(c, g.got)}${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}${hanreiNote(c)}` : ''}
+        ${g ? `<div class="judge ${g.ok ? 'o' : 'x'}">${g.ok ? '○ 全部見つけた！' : `× ${S.giveup ? 'わからない' : 'ミスが4回'}・あと${c.items.length - S.game.order.length}つ`}${S.sec != null ? `<span class="muted" style="font-weight:400;font-size:13px;margin-left:8px">${S.sec}秒</span>` : ''}</div>
+          ${itemsHTML(c, g.got)}${c.memo ? `<div class="memo">${esc(c.memo)}</div>` : ''}${hanreiNote(c)}`
+        : `<div id="play">${playHTML(S, c)}</div>`}
       </div>
       ${g ? `<div class="answer-bar"><button class="next" id="bn">次へ</button>${g.ok ? '' : '<button class="self" id="bs" data-se="none">合ってた<small>○ にする</small></button>'}</div>
-        <div class="keys">次へ … Enter</div>` : `<div class="keys">ローマ字で打つ ・ 次の答え … Enter か スペース ・ 答え合わせ … Shift+Enter</div>`}
+        <div class="keys">次へ … Enter</div>` : `<div class="keys">ローマ字で打つ ・ 確定 … スペース</div>`}
       ${foot}
-      ${g ? '' : keyboardHTML(S)}`, !!g);
+      ${g ? '' : keyboardHTML()}`, !!g);
     if (!g) { document.body.classList.add('kb-on'); bindKeyboard(); }
     else {
       document.getElementById('bn').onclick = () => nextTyped();
@@ -662,88 +667,72 @@ function answer(result) {
   setTimeout(() => { S.busy = false; advance(); }, result === 'o' ? 450 : 380);
 }
 
-// ----- 打ち込み型 -----
-function slotsHTML(S) {
-  const g = S.graded;
-  return S.slots.map((t, i) => {
-    const on = !g && i === S.active;
-    const cls = g ? (g.hit[i] >= 0 ? 'hit' : 'miss') : on ? 'on' : '';
-    const mk = g ? `<span class="mk">${g.hit[i] >= 0 ? '○' : '×'}</span>` : '';
-    const to = g && g.hit[i] >= 0 ? `<span class="to">→ ${g.hit[i] + 1}</span>` : '';
-    return `<div class="slot ${cls}" data-slot="${i}"><span class="no">${i + 1}</span><span class="tx">${esc(t)}${on ? `<span class="buf">${esc(S.buf)}</span><span class="caret"></span>` : ''}</span>${to}${mk}</div>`;
-  }).join('');
+// ----- 打ち込み型（タイピングゲーム型） -----
+// 1文字打つたびに、まだ見つけていない答えのどれかの頭と合っているかを見る（typing.js）。
+// 合えばコッ、合わなければブッで字は入らずミス1回。読みを打ち終えたらその行が開く。
+// 全部見つけたら ○、ミスが MISS_MAX を超えるか「わからない」で ×。
+function playHTML(S, c) {
+  const G = S.game, n = G.order.length;
+  const rows = c.show_count
+    ? c.items.map((it, j) => G.found[j]
+      ? `<li class="got${S.flash === j ? ' flash' : ''}">${esc(it.text)}</li>`
+      : '<li class="hid">？</li>').join('')
+    : G.order.map(j => `<li class="got${S.flash === j ? ' flash' : ''}" value="${j + 1}">${esc(c.items[j].text)}</li>`).join('');
+  const lives = Array.from({ length: MISS_MAX }, (_, i) => `<i class="${i < G.miss ? 'used' : ''}"></i>`).join('');
+  return `<div class="tstat"><span>見つけた <b>${n}</b>${c.show_count ? ` / ${c.items.length}` : ''}</span><span class="lives" title="ミスはあと${Math.max(0, MISS_MAX - G.miss)}回">ミス ${lives}</span></div>
+    <div class="tline" id="tline">${esc(G.kana)}<span class="buf">${esc(G.buf)}</span><span class="caret"></span></div>
+    ${rows ? `<ol class="items play">${rows}</ol>` : ''}`;
 }
-function updateSlots() {
-  const el = document.getElementById('slots'); if (!el) return;
-  el.innerHTML = slotsHTML(SESSION);
-  el.querySelector('.slot.on')?.scrollIntoView({ block: 'nearest' });
+function updatePlay(shake) {
+  const S = SESSION, el = document.getElementById('play'); if (!el) return;
+  el.innerHTML = playHTML(S, byId(S.queue[S.pos].id));
+  S.flash = null;
+  if (shake) { const t = document.getElementById('tline'); t.classList.remove('shake'); void t.offsetWidth; t.classList.add('shake'); }
 }
 const KB_ROWS = ['1234567890', 'qwertyuiop', 'asdfghjkl-', 'zxcvbnm'];
 function keyboardHTML() {
   const key = (k, label = k, cls = '') => `<button class="k ${cls}" data-k="${k}" data-se="none" tabindex="-1">${label}</button>`;
   return `<div id="kb" aria-label="キーボード">
     ${KB_ROWS.map((r, i) => `<div class="kb-row ${i === 0 ? 'num' : i === 3 ? 'r3' : ''}">${[...r].map(k => key(k, k === '-' ? 'ー' : k)).join('')}${i === 3 ? key('BS', '⌫', 'bs') : ''}</div>`).join('')}
-    <div class="kb-row">${key('NEXT', '次の答え', 'next')}${key('GO', '答え合わせ', 'go')}</div>
+    <div class="kb-row">${key('GIVEUP', 'わからない', 'giveup')}${key('SPACE', '確定', 'next')}</div>
   </div>`;
 }
 function bindKeyboard() {
-  const kb = document.getElementById('kb');
-  kb.addEventListener('pointerdown', e => {
+  document.getElementById('kb').addEventListener('pointerdown', e => {
     const b = e.target.closest('.k'); if (!b) return;
     e.preventDefault();
     b.classList.add('pressed'); setTimeout(() => b.classList.remove('pressed'), 110);
-    if (b.dataset.k !== 'GO') SE.tick();
     typeKey(b.dataset.k);
   });
-  document.getElementById('slots').addEventListener('click', e => {
-    const el = e.target.closest('.slot'); if (!el) return;
-    const S = SESSION; flushSlot(S); S.active = +el.dataset.slot; updateSlots();
-  });
 }
-function flushSlot(S) { S.slots[S.active] = flushRoma(S.slots[S.active], S.buf); S.buf = ''; }
 function typeKey(k) {
   const S = SESSION; if (!S || !S.typing || S.graded || S.busy) return;
-  if (k === 'GO') return gradeTyped();
-  if (k === 'BS') {
-    if (S.buf) S.buf = S.buf.slice(0, -1);
-    else if (S.slots[S.active]) S.slots[S.active] = [...S.slots[S.active]].slice(0, -1).join('');
-    else if (S.active > 0) { if (!S.fixed && S.active === S.slots.length - 1) S.slots.pop(); S.active--; }
-  } else if (k === 'NEXT') {
-    flushSlot(S);
-    if (S.active < S.slots.length - 1) S.active++;
-    else if (!S.fixed && S.slots[S.active] && S.slots.length < 20) { S.slots.push(''); S.active++; }
-  } else {
-    const r = feedRoma(S.slots[S.active], S.buf, k);
-    S.slots[S.active] = r.kana; S.buf = r.buf;
-  }
-  updateSlots();
+  const G = S.game;
+  if (k === 'GIVEUP') { S.giveup = true; return finishTyped(false); }
+  if (k === 'BS') { SE.tick(); backspace(G); return updatePlay(); }
+  const evs = k === 'SPACE' ? commit(G) : press(G, k);
+  const found = evs.filter(e => e.ev === 'found'), miss = evs.some(e => e.ev === 'miss');
+  if (done(G)) return finishTyped(true);
+  if (lost(G)) return finishTyped(false);
+  if (found.length) { S.flash = found[found.length - 1].j; fadeOut(SE.check(), 0.6); }
+  else if (miss) SE.miss();
+  else if (k !== 'SPACE') SE.tick();
+  updatePlay(miss);
 }
-const CHECK_WAIT = 0.9; // 答え合わせの音を聞かせてから ○× を出すまでの秒数（音がもっと短ければその長さ）
-function gradeTyped() {
-  const S = SESSION; if (S.busy) return;
-  const c = byId(S.queue[S.pos].id);
-  flushSlot(S); updateSlots();
+// ○× が決まった
+function finishTyped(ok) {
+  const S = SESSION, c = byId(S.queue[S.pos].id), G = S.game;
   S.sec = elapsedSec(S);
-  const g = grade(c, S.slots.map(t => t.trim()));
-  // 答え合わせの音 → ドキドキの間 → ○×
-  const p = SE.check();
-  const wait = p ? Math.min(p.len, CHECK_WAIT) : 0;
-  S.busy = true;
-  document.getElementById('kb')?.classList.add('wait');
-  setTimeout(() => {
-    S.busy = false;
-    fadeOut(p);
-    S.graded = g;
-    if (g.ok) { SE.correct(); bigMark('o'); }
-    else { SE.wrong(); bigMark('x'); }
-    viewSolve();
-    if (!g.ok) document.getElementById('qcard')?.classList.add('shake');
-  }, wait * 1000);
+  S.graded = { ok, got: c.items.map((_, j) => (G.found[j] ? 0 : -1)) };
+  if (ok) { SE.correct(); bigMark('o'); }
+  else { SE.wrong(); bigMark('x'); }
+  viewSolve();
+  if (!ok) document.getElementById('qcard')?.classList.add('shake');
 }
 function nextTyped() {
   const S = SESSION; if (!S || !S.graded) return;
-  const result = S.graded.ok || S.self ? 'o' : 'x';
-  record(result, { typed: S.slots.slice(), judge: S.self ? 'self' : 'auto' });
+  const result = S.graded.ok || S.self ? 'o' : 'x', G = S.game;
+  record(result, Object.assign({ found: G.order.slice(), miss: G.miss, judge: S.self ? 'self' : 'auto' }, S.giveup ? { giveup: true } : {}));
   advance();
 }
 
@@ -753,10 +742,9 @@ document.addEventListener('keydown', e => {
   const S = SESSION, k = e.key.toLowerCase();
   if (S.typing) {
     if (S.graded) { if (k === 'enter' || k === ' ') { e.preventDefault(); if (!S.busy) nextTyped(); } return; }
-    if (k === 'enter' && (e.shiftKey || (S.fixed && S.active === S.slots.length - 1) || (!S.fixed && !S.slots[S.active] && !S.buf && S.slots.length > 1))) { e.preventDefault(); typeKey('GO'); }
-    else if (k === 'enter' || k === ' ') { e.preventDefault(); typeKey('NEXT'); }
+    if (k === 'enter' || k === ' ') { e.preventDefault(); typeKey('SPACE'); }
     else if (k === 'backspace') { e.preventDefault(); typeKey('BS'); }
-    else if (/^[a-z0-9\-']$/.test(k)) { e.preventDefault(); if (!S.busy) SE.tick(); typeKey(k); }
+    else if (/^[a-z0-9\-']$/.test(k)) { e.preventDefault(); typeKey(k); }
     return;
   }
   if (!S.shown && (k === ' ' || k === 'enter')) { e.preventDefault(); SE.pop(); showAnswer(); }
@@ -852,7 +840,7 @@ function viewSettings() {
     <div class="panel">
       <div class="row"><label>1回に解く枚数 <input type="number" id="ps" min="1" max="500" value="${s.perSession}" style="width:5em"> 枚まで</label><span class="muted">要注意の順・まだ解いていない、のとき</span></div>
       <div class="row"><label><input type="checkbox" id="snd" ${s.sound ? 'checked' : ''}> 音を出す（さわったとき・○・×）</label></div>
-      <div class="row" style="flex-wrap:wrap"><button id="t1" data-se="none">○ と演出</button><button id="t2" data-se="none">×</button><button id="t3" data-se="none">キー</button><button id="t4">ボタン</button><button id="t5" data-se="big">大きな選択</button><button id="t6" data-se="none">答え合わせ</button><button id="t7" data-se="none">解き終わり</button></div>
+      <div class="row" style="flex-wrap:wrap"><button id="t1" data-se="none">○ と演出</button><button id="t2" data-se="none">×</button><button id="t3" data-se="none">キー</button><button id="t8" data-se="none">打ちまちがい</button><button id="t4">ボタン</button><button id="t5" data-se="big">大きな選択</button><button id="t6" data-se="none">見つけた</button><button id="t7" data-se="none">解き終わり</button></div>
       <p class="muted" style="margin:0">音：効果音ラボ（${Object.keys(SE_BUF).length}/${Object.keys(SE_FILES).length} 読めた。読めない音は作った音で鳴る）</p>
       <div class="row"><label>この端末の名前 <input type="text" id="dev" value="${esc(s.device)}" style="width:8em"></label><span class="muted">記録のファイル名に使う（例：PC、iPhone）</span></div>
     </div>
@@ -894,7 +882,8 @@ function viewSettings() {
   document.getElementById('t1').onclick = () => { SE.correct(); bigMark('o'); };
   document.getElementById('t2').onclick = () => { SE.wrong(); bigMark('x'); };
   document.getElementById('t3').onclick = () => SE.tick();
-  document.getElementById('t6').onclick = () => SE.check();
+  document.getElementById('t6').onclick = () => fadeOut(SE.check(), 0.6);
+  document.getElementById('t8').onclick = () => SE.miss();
   document.getElementById('t7').onclick = () => SE.finish();
   document.getElementById('export').onclick = () => {
     const blob = new Blob([ev.map(e => JSON.stringify(e)).join('\n') + (ev.length ? '\n' : '')], { type: 'application/x-ndjson' });

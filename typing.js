@@ -1,11 +1,12 @@
-// 暗記カード：打ち込み型の答え合わせ（2026-11-26〜）
-//   ローマ字 → ひらがな、打った答えとカードの「正解にする言い方」（items[].keys）の突き合わせ。
+// 暗記カード：打ち込み型（タイピングゲーム型。2026-11-26〜）
+//   ローマ字 → ひらがな、1文字打つたびに「まだ見つけていない答えのどれかの頭と合っているか」を見る。
 //   画面には触らない。node でも読める（試すとき）。
 //
-// カードの形：items[] に keys（ひらがなの短い言葉の配列）があると、そのカードは打ち込み型で出る。
-//   打った答えに keys のどれかが入っていれば、その項目に当たり。答えの順番は問わない。
-//   1つの答えは1つの項目にしか当たらない。全部の項目に当たれば ○。
-//   keys の頭が数字のとき（例："5ねん"）は、すぐ前が数字なら当たりにしない（"15ねん" を "5ねん" と見ない）。
+// カードの形：items[] の全部に yomi（その項目の答えの読み。ひらがな。言いかえも並べられる）があると、
+//   そのカードは打ち込み型で出る。どの項目から打ってもよい。読みを打ち終えたら、その項目を見つけたことになる。
+//   合わない字はブッで入らず、ミスに数える。ミスが MISS_MAX 回を超えたら ×。
+//   読みが、ほかの項目の読みの頭と同じとき（りこう／りこうのせいきゅう）は、次の答えを打ち始めるか「確定」で決まる。
+//   同じ項目の中の長い読み（5ねん／5ねんかん）は、短いほうで見つけたことにして、続けて打った残りは受け流す。
 
 const ROMA = (() => {
   const t = {
@@ -74,37 +75,90 @@ function normKana(s) {
     .replace(/[ァ-ヶ]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x60))
     .replace(/[\s、。，．,.・「」『』（）()［］\[\]〔〕:：;；!！?？'"]/g, '');
 }
-function hasKey(ans, key) {
-  const a = normKana(ans), k = normKana(key);
-  if (!k) return false;
-  let i = a.indexOf(k);
-  while (i >= 0) {
-    if (!(/^[0-9]/.test(k) && i > 0 && /[0-9]/.test(a[i - 1]))) return true;
-    i = a.indexOf(k, i + 1);
-  }
+const MISS_MAX = 3; // カード1枚で、打ちまちがいはここまで。超えたら ×
+
+const ROMA_LIST = Object.entries(ROMA);
+// 読み r が、打ったかな kana と、まだかなになっていないローマ字 buf の続きとしてありうるか
+function prefixValid(r, kana, buf) {
+  if (!r.startsWith(kana)) return false;
+  const rest = r.slice(kana.length);
+  if (!buf) return true;
+  if (!rest) return false;
+  for (const [k, v] of ROMA_LIST) if (k.startsWith(buf) && rest.startsWith(v)) return true;
+  // っ を子音の重ねで打つ途中（kka の k）
+  if (buf.length === 1 && rest[0] === 'っ' && rest.length > 1 && /[bcdfghjkmpqrstvwxyz]/.test(buf)) return prefixValid(r, kana + 'っ', buf);
   return false;
 }
-function typeable(card) { return !!(card.items && card.items.length && card.items.every(it => Array.isArray(it.keys) && it.keys.length)); }
+function typeable(card) { return !!(card.items && card.items.length && card.items.every(it => Array.isArray(it.yomi) && it.yomi.length)); }
 
-// 打った答え（配列）とカードの項目を突き合わせる。返すのは
-//   { ok, hit: [答えごとに当たった項目の番号 or -1], got: [項目ごとに当てた答えの番号 or -1] }
-function grade(card, answers) {
-  const items = card.items;
-  const can = answers.map(a => items.map((it, j) => (normKana(a) ? it.keys.some(k => hasKey(a, k)) : false)).map((v, j) => (v ? j : -1)).filter(j => j >= 0));
-  const got = items.map(() => -1);
-  // 二部マッチング（答えをできるだけ多くの項目に当てる）
-  const tryA = (i, seen) => {
-    for (const j of can[i]) {
-      if (seen[j]) continue;
-      seen[j] = true;
-      if (got[j] < 0 || tryA(got[j], seen)) { got[j] = i; return true; }
-    }
-    return false;
+// 1枚ぶんのゲームの状態
+function newGame(card) {
+  return {
+    yomi: card.items.map(it => it.yomi.map(normKana).filter(Boolean)),
+    found: card.items.map(() => false), order: [], kana: '', buf: '', miss: 0, swallowN: false, tail: null,
   };
-  answers.forEach((_, i) => tryA(i, {}));
-  const hit = answers.map(() => -1);
-  got.forEach((i, j) => { if (i >= 0) hit[i] = j; });
-  return { ok: got.every(i => i >= 0), hit, got };
+}
+// まだ見つけていない項目の読み：[{ j, r }]
+function openYomi(g) { const a = []; g.yomi.forEach((ys, j) => { if (!g.found[j]) ys.forEach(r => a.push({ j, r })); }); return a; }
+const anyValid = (g, kana, buf) => openYomi(g).some(o => prefixValid(o.r, kana, buf));
+// 今打っているものが、ちょうど読みの1つになっているか（n の打ちかけは ん とみる）
+function exactHit(g, kana, buf) {
+  const t = flushRoma(kana, buf);
+  if (buf && buf !== 'n') return null;
+  return openYomi(g).find(o => o.r === t) || null;
+}
+// 見つけた。同じ項目のもっと長い読み（5ねん／5ねんかん）の残りは、続けて打っても受け流す（g.tail）
+function take(g, j, viaN) {
+  const t = flushRoma(g.kana, g.buf);
+  const rest = g.yomi[j].filter(r => r.length > t.length && r.startsWith(t)).map(r => r.slice(t.length));
+  g.found[j] = true; g.order.push(j); g.kana = ''; g.buf = ''; g.swallowN = !!viaN;
+  g.tail = rest.length ? { list: rest, kana: '', buf: '' } : null;
+}
+const done = g => g.found.every(Boolean);
+const lost = g => g.miss > MISS_MAX;
+
+// 1文字打つ。返すのは起きたことの配列：{ ev: 'ok' } ／ { ev: 'miss' } ／ { ev: 'found', j }
+function press(g, ch) {
+  ch = String(ch).toLowerCase();
+  if (g.swallowN) { g.swallowN = false; if (ch === 'n') return [{ ev: 'ok' }]; } // 「ん」を nn と打った2つ目
+  if (g.tail) {
+    const T = g.tail, c = feedRoma(T.kana, T.buf, ch);
+    if ((c.kana !== T.kana || c.buf !== T.buf) && T.list.some(t => prefixValid(t, c.kana, c.buf))) {
+      T.kana = c.kana; T.buf = c.buf;
+      if (!c.buf && !T.list.some(t => t !== c.kana && t.startsWith(c.kana))) g.tail = null; // 打ち終えた
+      return [{ ev: 'ok' }];
+    }
+    g.tail = null;
+  }
+  const c = feedRoma(g.kana, g.buf, ch);
+  const moved = c.kana !== g.kana || c.buf !== g.buf;
+  if (moved && anyValid(g, c.kana, c.buf)) {
+    g.kana = c.kana; g.buf = c.buf;
+    const hit = exactHit(g, c.kana, c.buf);
+    // ほかの項目に続きのある読みがなければ、ここで見つけたことにする
+    if (hit && !openYomi(g).some(o => o.j !== hit.j && o.r !== hit.r && prefixValid(o.r, c.kana, c.buf))) {
+      take(g, hit.j, c.buf === 'n');
+      return [{ ev: 'found', j: hit.j }];
+    }
+    return [{ ev: 'ok' }];
+  }
+  // 合わない字。今までのぶんがちょうど読みなら、それを見つけたことにして、この字を次の答えの頭として打ち直す
+  const hit = (g.kana || g.buf) && exactHit(g, g.kana, g.buf);
+  if (hit) { take(g, hit.j, false); return [{ ev: 'found', j: hit.j }, ...(done(g) ? [] : press(g, ch))]; }
+  g.miss++;
+  return [{ ev: 'miss' }];
+}
+// 確定（スペース）：今までのぶんがちょうど読みなら見つけたことにする
+function commit(g) {
+  const hit = (g.kana || g.buf) && exactHit(g, g.kana, g.buf);
+  if (!hit) return [];
+  take(g, hit.j, false);
+  return [{ ev: 'found', j: hit.j }];
+}
+function backspace(g) {
+  g.swallowN = false; g.tail = null;
+  if (g.buf) g.buf = g.buf.slice(0, -1);
+  else if (g.kana) g.kana = [...g.kana].slice(0, -1).join('');
 }
 
-if (typeof module !== 'undefined') module.exports = { feedRoma, flushRoma, normKana, hasKey, grade, typeable };
+if (typeof module !== 'undefined') module.exports = { feedRoma, flushRoma, normKana, typeable, newGame, press, commit, backspace, done, lost, MISS_MAX };
