@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>キャラメイクの試作</title>
+<style>
+  :root { --bg:#14121f; --card:#1f1c30; --ink:#f3f0ff; --sub:#a9a3c8; --acc:#ffb84d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif; -webkit-tap-highlight-color:transparent; }
+  .wrap { max-width:480px; margin:0 auto; padding:12px 12px 40px; }
+  h1 { font-size:18px; margin:4px 0 2px; }
+  .lead { color:var(--sub); font-size:13px; margin:0 0 10px; line-height:1.6; }
+  .thumbs { display:grid; grid-template-columns:repeat(4,1fr); gap:6px; }
+  .thumb { background:var(--card); border:2px solid transparent; border-radius:12px; padding:2px 2px 4px; text-align:center; cursor:pointer; color:var(--ink); font:inherit; }
+  .thumb.on { border-color:var(--acc); }
+  .thumb svg { width:100%; height:auto; display:block; }
+  .thumb b { display:block; font-size:12px; }
+  .thumb small { color:var(--sub); font-size:10px; }
+  .stage { position:relative; margin-top:10px; border-radius:16px; overflow:hidden;
+    background:radial-gradient(120% 80% at 50% 0%, #3b2f6b 0%, #1d1838 60%, #120f22 100%); }
+  .stage::after { content:""; position:absolute; left:0; right:0; bottom:0; height:22%;
+    background:linear-gradient(#2a2346,#1a1530); border-top:2px solid #43397a; z-index:0; }
+  .stage svg { position:relative; z-index:1; width:100%; height:auto; display:block; }
+  .quiz { position:absolute; left:6%; right:6%; bottom:6%; z-index:2; background:rgba(255,255,255,.93); color:#222;
+    border-radius:14px; padding:12px; display:none; box-shadow:0 6px 20px rgba(0,0,0,.35); }
+  .stage.withq .quiz { display:block; }
+  .quiz p { margin:0 0 10px; font-size:15px; line-height:1.5; }
+  .quiz .ox { display:flex; gap:8px; } .quiz .ox span { flex:1; text-align:center; padding:8px; border-radius:10px; background:#eee; font-weight:bold; font-size:18px; }
+  .btns { display:flex; gap:8px; margin-top:10px; }
+  .btns button { flex:1; padding:12px 6px; border-radius:12px; border:0; font:inherit; font-weight:bold; font-size:15px; cursor:pointer; }
+  .go { background:var(--acc); color:#2a1a00; }
+  .sub { background:#2e2948; color:var(--ink); }
+  .info { background:var(--card); border-radius:14px; padding:12px 14px; margin-top:10px; font-size:14px; line-height:1.7; }
+  .info h2 { font-size:17px; margin:0 0 4px; }
+  .info h2 small { color:var(--sub); font-weight:normal; font-size:13px; margin-left:6px; }
+  .info dl { margin:0; display:grid; grid-template-columns:5.5em 1fr; gap:2px 8px; }
+  .info dt { color:var(--acc); }
+  .info dd { margin:0; }
+  .note { color:var(--sub); font-size:12px; margin-top:10px; line-height:1.6; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>キャラメイクの試作</h1>
+  <p class="lead">攻撃の動きを見せるキャラの候補。下の4人から選んで「攻撃してみる」。白い線や光は動きを見るための仮のもので、本物のエフェクトは技名を決めてから作る。</p>
+  <div class="thumbs" id="thumbs"></div>
+  <div class="stage" id="stage">
+    <div id="big"></div>
+    <div class="quiz"><p>問　権利能力は、出生によって始まる。</p><div class="ox"><span>○</span><span>×</span></div></div>
+  </div>
+  <div class="btns">
+    <button class="go" id="atk">攻撃してみる</button>
+    <button class="sub" id="qbtn">問題を重ねる</button>
+  </div>
+  <div class="info" id="info"></div>
+  <p class="note">試作なので、本番のアプリとは別のページ。名前・色・髪型・武器はあとで変えられる。</p>
+</div>
+
+<script>
+const OL = '#2b2030';
+const O = (x, y) => `transform-box:view-box;transform-origin:${x}px ${y}px`;
+const R = (x, y, w, h, rx, f, sw = 3) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${f}" stroke="${OL}" stroke-width="${sw}"/>`;
+const C = (cx, cy, r, f, sw = 3) => `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${f}" stroke="${OL}" stroke-width="${sw}"/>`;
+const P = (d, f, sw = 3, cls = '') => `<path ${cls ? `class="${cls}"` : ''} d="${d}" fill="${f}" stroke="${OL}" stroke-width="${sw}" stroke-linejoin="round" stroke-linecap="round"/>`;
+
+/* ---------- 武器 ---------- */
+const SWORD = (blade = '#cfe9ff') => `
+  ${R(-4, -4, 8, 22, 3, '#3a2a20')}
+  ${R(-15, -9, 30, 7, 3, '#f2c14e')}
+  ${P('M-7,-9 L-7,-100 L0,-116 L7,-100 L7,-9 Z', blade)}
+  <path d="M0,-14 L0,-104" stroke="#fff" stroke-width="2.5" opacity=".8"/>`;
+const STAFF = `
+  <path d="M0,40 L0,-110" stroke="${OL}" stroke-width="10" stroke-linecap="round"/>
+  <path d="M0,40 L0,-110" stroke="#8a5a2b" stroke-width="5" stroke-linecap="round"/>
+  ${P('M-14,-112 Q-18,-132 0,-140 Q-8,-128 -4,-116 Z', '#f2c14e', 2.5)}
+  ${C(4, -126, 11, '#7ff0ff')}
+  <circle cx="1" cy="-129" r="3.5" fill="#fff"/>`;
+const BOOK = `
+  ${R(-16, -12, 32, 26, 3, '#8e1f2b')}
+  <rect x="-13" y="-9" width="4" height="20" fill="#f2c14e"/>
+  <text x="3" y="5" font-size="10" text-anchor="middle" fill="#ffe7a8" font-weight="bold">六法</text>`;
+
+/* ---------- 部品 ---------- */
+function leg(cls, x, hipY, pants, boot) {
+  const top = hipY - 4, h = 226 - top;
+  return `<g class="p ${cls}" style="${O(x, hipY)}">${R(x - 9, top, 18, h + 2, 8, pants)}${P(`M${x - 10},226 L${x + 8},226 Q${x + 19},228 ${x + 19},238 L${x + 19},245 L${x - 10},245 Z`, boot)}</g>`;
+}
+function arm(cls, sx, sy, sleeve, handSvg, wpn) {
+  const hx = sx, hy = sy + 38;
+  const w = wpn ? `<g class="p ${cls === 'armF' ? 'wpn' : 'wpnB'}" style="${O(hx, hy)}"><g transform="translate(${hx},${hy}) rotate(${wpn.rot})">${wpn.svg}</g></g>` : '';
+  return `<g class="p ${cls}" style="${O(sx, sy)}">${R(sx - 7, sy - 6, 14, 42, 7, sleeve)}${w}${handSvg(hx, hy)}</g>`;
+}
+const skinHand = skin => (x, y) => C(x, y, 8, skin);
+const glove = col => (x, y) => `${C(x + 1, y + 2, 12, col)}<path d="M${x - 5},${y - 3} q6,-3 12,0 M${x - 5},${y + 3} q6,-3 12,0" stroke="${OL}" stroke-width="2" fill="none"/>`;
+
+function face(skin, eye) {
+  return `
+    ${C(102, 86, 40, skin)}
+    <ellipse cx="86" cy="104" rx="6" ry="3.5" fill="#ff8a9a" opacity=".45"/>
+    <ellipse cx="124" cy="104" rx="5" ry="3.2" fill="#ff8a9a" opacity=".45"/>
+    <ellipse cx="97" cy="92" rx="5.6" ry="8.6" fill="${eye}"/>
+    <ellipse cx="120" cy="92" rx="4.6" ry="8.2" fill="${eye}"/>
+    <circle cx="99" cy="88" r="2.3" fill="#fff"/><circle cx="121.5" cy="88" r="2" fill="#fff"/>
+    <path d="M89,79 L104,81 M114,81 L126,78" stroke="${OL}" stroke-width="3" stroke-linecap="round"/>
+    <path d="M105,106 q6,4 11,-1" stroke="${OL}" stroke-width="2.6" fill="none" stroke-linecap="round"/>`;
+}
+
+/* ---------- キャラ ---------- */
+const CH = [
+  {
+    id: 'ritsu', name: 'リツ', kind: '剣士',
+    from: '法律の「律」。まっすぐで、条文をよりどころに戦う',
+    move: '大きな剣で斬る。踏み込んで振り下ろす・回転斬り・居合い',
+    waza: '斬る系（〇〇斬り・〇〇一閃 など）',
+    build() {
+      const skin = '#ffdcc0', jacket = '#2f62b8', pants = '#1f2a44', boot = '#5b3a1e';
+      const hairBack = P('M60,98 L48,72 L64,72 L56,48 L78,56 L80,32 L98,46 L110,26 L120,46 L140,34 L136,56 L154,56 L142,74 L148,96 Q104,44 60,98 Z', '#2a3a6b');
+      const bangs = P('M62,84 Q66,46 104,44 Q136,44 144,78 L134,70 L130,84 L120,68 L112,82 L104,66 L94,82 L88,68 L76,86 Z', '#2a3a6b');
+      const band = P('M61,74 Q102,58 143,70 L144,79 Q102,66 61,83 Z', '#d33b3b', 2.5);
+      const tail = `<g class="p tail" style="${O(62,79)}">${P('M63,77 Q40,70 22,82 Q42,82 46,94 Q54,84 63,84 Z', '#d33b3b', 2.5)}</g>`;
+      const torso = `${R(94, 114, 14, 18, 4, skin)}
+        ${P('M78,130 Q100,121 122,130 L125,186 Q100,194 75,186 Z', jacket)}
+        <path d="M90,128 L101,152 L113,128" stroke="#fff" stroke-width="5" fill="none" stroke-linejoin="round"/>
+        ${R(76, 172, 48, 9, 3, '#d33b3b', 2.5)}`;
+      return {
+        hip: 186,
+        legB: leg('legB', 92, 186, pants, boot), legF: leg('legF', 110, 186, pants, boot),
+        armB: arm('armB', 84, 138, jacket, skinHand(skin)),
+        armF: arm('armF', 118, 138, jacket, skinHand(skin), { rot: 60, svg: SWORD() }),
+        torso, head: tail + hairBack + face(skin, '#23306b') + bangs + band,
+      };
+    },
+    attack: 'sword',
+  },
+  {
+    id: 'ken', name: 'ケン', kind: '拳士',
+    from: '権利の「権」と、こぶしの「拳」。元気で手が早い',
+    move: '素手の連打とけり。手数で押す・最後に大技',
+    waza: '打つ系（〇〇拳・〇〇連打・〇〇脚 など）',
+    build() {
+      const skin = '#ffd6b5', top = '#e0403f', pants = '#f1ebe0', boot = '#26232f', gl = '#ff7a3d';
+      const hairBack = P('M60,100 Q54,40 102,40 Q150,40 146,100 Q102,70 60,100 Z', '#3b2418');
+      const buns = `${C(70, 46, 15, '#3b2418')}${C(134, 46, 15, '#3b2418')}
+        <path d="M60,54 l-6,8 M80,56 l4,8 M126,56 l-4,8 M144,54 l6,8" stroke="#f2c14e" stroke-width="4" stroke-linecap="round"/>`;
+      const bangs = P('M62,86 Q64,46 104,44 Q142,46 144,84 Q130,64 118,60 L114,76 L102,60 L94,76 Q82,64 62,86 Z', '#3b2418');
+      const torso = `${R(94, 114, 14, 18, 4, skin)}
+        ${P('M78,130 Q100,121 122,130 L124,186 Q100,194 76,186 Z', top)}
+        <path d="M100,126 L100,180" stroke="#f2c14e" stroke-width="3"/>
+        <circle cx="100" cy="142" r="2.5" fill="#f2c14e"/><circle cx="100" cy="156" r="2.5" fill="#f2c14e"/>
+        ${R(76, 172, 48, 9, 3, '#f2c14e', 2.5)}`;
+      return {
+        hip: 186,
+        legB: leg('legB', 92, 186, pants, boot), legF: leg('legF', 110, 186, pants, boot),
+        armB: arm('armB', 84, 138, top, glove(gl)),
+        armF: arm('armF', 118, 138, top, glove(gl)),
+        torso, head: buns + hairBack + face(skin, '#5a2a1a') + bangs,
+      };
+    },
+    attack: 'fist',
+  },
+  {
+    id: 'roku', name: 'ロク', kind: '魔導士',
+    from: '「六法」から。六法全書を魔導書にして、杖で呪文を放つ',
+    move: '魔法陣を出して光線・雷・隕石。ためて大きく放つ',
+    waza: '呪文系（〇〇の光・〇〇メテオ・〇〇の陣 など）',
+    build() {
+      const skin = '#ffe2cc', robe = '#5b3fa0', pants = '#3a2a66', boot = '#3a2a66';
+      const hairBack = `${P('M64,90 Q46,140 58,178 L80,166 Q70,124 78,96 Z', '#e8ecff')}${P('M140,90 Q156,136 148,172 L130,164 Q138,124 128,96 Z', '#e8ecff')}`;
+      const hat = `<g class="p hat" style="${O(102,70)}">
+        ${P('M72,68 Q88,18 150,-6 Q126,26 134,68 Z', '#4a2f8a')}
+        ${P('M44,72 Q102,54 160,70 Q156,82 102,76 Q58,84 44,72 Z', '#4a2f8a')}
+        ${P('M74,66 Q102,58 134,64 L134,72 Q102,66 74,74 Z', '#f2c14e', 2)}
+        <path d="M112,30 l3,6 6,1 -5,4 1,6 -5,-3 -5,3 1,-6 -5,-4 6,-1 Z" fill="#ffe27a"/></g>`;
+      const bangs = P('M66,82 Q102,70 140,80 Q138,92 130,96 Q126,86 116,84 Q110,94 100,96 Q100,86 90,84 Q84,92 74,96 Q66,92 66,82 Z', '#e8ecff');
+      const torso = `${R(94, 114, 14, 18, 4, skin)}
+        ${P('M80,130 Q102,121 124,130 L136,214 Q102,224 68,214 Z', robe)}
+        <path d="M102,128 L102,214" stroke="#f2c14e" stroke-width="3"/>
+        ${P('M86,128 Q102,140 118,128 L114,124 Q102,132 90,124 Z', '#f2c14e', 2)}`;
+      return {
+        hip: 186,
+        legB: leg('legB', 92, 186, pants, boot), legF: leg('legF', 110, 186, pants, boot),
+        armB: arm('armB', 84, 138, robe, skinHand(skin), { rot: -10, svg: BOOK }),
+        armF: arm('armF', 120, 138, robe, skinHand(skin), { rot: 10, svg: STAFF }),
+        torso, head: hairBack + face(skin, '#3b5bd6') + bangs + hat,
+      };
+    },
+    attack: 'magic',
+  },
+  {
+    id: 'clawd', name: '手足つき Clawd', kind: 'Clawd',
+    from: '今の Clawd に手と足を付けて、剣を持たせた。見慣れた顔のまま',
+    move: '剣を持って回転斬り。体が四角いので、転がる・はねる動きが似合う',
+    waza: 'どの系でも（Clawd の名前を入れる）',
+    build() {
+      const body = '#d97757', dark = '#2b2030';
+      const torso = `
+        ${R(58, 92, 88, 86, 14, body)}
+        ${R(46, 118, 14, 22, 5, body)}${R(144, 118, 14, 22, 5, body)}
+        <rect x="84" y="114" width="8" height="18" rx="2" fill="${dark}"/>
+        <rect x="112" y="114" width="8" height="18" rx="2" fill="${dark}"/>`;
+      const scarf = `<g class="p tail" style="${O(60,96)}">${P('M62,96 Q40,90 24,102 Q44,102 46,114 Q54,104 62,104 Z', '#d33b3b', 2.5)}</g>
+        ${P('M58,98 Q102,88 146,98 L146,106 Q102,96 58,106 Z', '#d33b3b', 2.5)}`;
+      return {
+        hip: 176,
+        legB: leg('legB', 88, 176, body, '#3a2a20'), legF: leg('legF', 114, 176, body, '#3a2a20'),
+        armB: arm('armB', 60, 132, body, glove('#ffffff')),
+        armF: arm('armF', 144, 132, body, glove('#ffffff'), { rot: 60, svg: SWORD('#ffe0b8') }),
+        torso, head: scarf,
+      };
+    },
+    attack: 'spin',
+  },
+];
+
+/* 動きを見るための仮の光（本物のエフェクトはあとで） */
+function star(cx, cy, r1, r2, n) {
+  let d = '';
+  for (let i = 0; i < n * 2; i++) {
+    const a = Math.PI * i / n - Math.PI / 2, r = i % 2 ? r2 : r1;
+    d += (i ? 'L' : 'M') + (cx + Math.cos(a) * r).toFixed(1) + ',' + (cy + Math.sin(a) * r).toFixed(1);
+  }
+  return d + 'Z';
+}
+const FX = `<g class="fx">
+  <path class="p slash" d="M150,30 Q268,140 150,250 Q226,140 150,30 Z" fill="#fff" opacity="0" style="${O(170,140)}"/>
+  <path class="p hit" d="${star(182,150,26,9,8)}" fill="#fff6a8" opacity="0" style="${O(182,150)}"/>
+  <g class="p ring" opacity="0" style="${O(205,130)}">
+    <circle cx="205" cy="130" r="36" fill="none" stroke="#c9b6ff" stroke-width="4"/>
+    <circle cx="205" cy="130" r="26" fill="none" stroke="#c9b6ff" stroke-width="2" stroke-dasharray="6 5"/>
+    <path d="${star(205,130,30,12,6)}" fill="none" stroke="#e9e0ff" stroke-width="2"/></g>
+  <rect class="p beam" x="205" y="118" width="80" height="24" rx="12" fill="#f0eaff" opacity="0" style="${O(205,130)}"/>
+</g>`;
+
+function svgChara(c, view) {
+  const b = c.build();
+  return `<svg viewBox="${view}" xmlns="http://www.w3.org/2000/svg">
+    <ellipse cx="104" cy="246" rx="42" ry="7" fill="#000" opacity=".28"/>
+    <g class="p rig" style="${O(102,248)}"><g class="p spin" style="${O(102,150)}">
+      ${b.legB}${b.legF}
+      <g class="p upper" style="${O(102,b.hip)}">${b.armB}${b.torso}<g class="p head" style="${O(102,126)}">${b.head}</g>${b.armF}</g>
+    </g>${FX}</g>
+  </svg>`;
+}
+
+/* ---------- 動き ---------- */
+const ATK = {
+  sword: { dur: 950, parts: {
+    rig:   [[0], [.22, 'translateX(-8px)'], [.46, 'translateX(46px)'], [.78, 'translateX(46px)'], [1]],
+    upper: [[0], [.22, 'rotate(-10deg)'], [.46, 'rotate(14deg)'], [.78, 'rotate(12deg)'], [1]],
+    armF:  [[0], [.22, 'rotate(160deg)'], [.46, 'rotate(-75deg)'], [.78, 'rotate(-68deg)'], [1]],
+    wpn:   [[0], [.18, 'rotate(120deg)'], [.78, 'rotate(120deg)'], [1]],
+    armB:  [[0], [.22, 'rotate(40deg)'], [.46, 'rotate(-30deg)'], [.78, 'rotate(-25deg)'], [1]],
+    legF:  [[0], [.22], [.46, 'rotate(-40deg)'], [.78, 'rotate(-36deg)'], [1]],
+    legB:  [[0], [.22, 'rotate(10deg)'], [.46, 'rotate(32deg)'], [.78, 'rotate(28deg)'], [1]],
+    slash: [[0, 'scale(.6)', 0], [.4, 'scale(.6)', 0], [.48, 'scale(1)', .95], [.7, 'scale(1.08)', 0], [1, 'scale(1.08)', 0]],
+  }},
+  fist: { dur: 1300, parts: {
+    rig:   [[0], [.1, 'translateX(14px)'], [.28, 'translateX(24px)'], [.46, 'translateX(34px)'], [.86, 'translateX(40px)'], [1]],
+    upper: [[0], [.1, 'rotate(8deg)'], [.28, 'rotate(10deg)'], [.46, 'rotate(14deg)'], [.68, 'rotate(-16deg)'], [.86, 'rotate(-14deg)'], [1]],
+    armF:  [[0], [.1, 'rotate(-95deg)'], [.2, 'rotate(10deg)'], [.28, 'rotate(20deg)'], [.38, 'rotate(10deg)'], [.46, 'rotate(-100deg)'], [.58, 'rotate(-90deg)'], [.68, 'rotate(40deg)'], [1]],
+    armB:  [[0], [.1, 'rotate(20deg)'], [.2, 'rotate(10deg)'], [.28, 'rotate(-95deg)'], [.38, 'rotate(0deg)'], [.68, 'rotate(50deg)'], [1]],
+    legF:  [[0], [.46, 'rotate(-20deg)'], [.58, 'rotate(-10deg)'], [.68, 'rotate(-105deg)'], [.86, 'rotate(-100deg)'], [1]],
+    legB:  [[0], [.1, 'rotate(15deg)'], [.46, 'rotate(20deg)'], [.68, 'rotate(8deg)'], [1]],
+    hit:   [[0, 'scale(.3)', 0], [.08, 'scale(.3)', 0], [.1, 'scale(1)', 1], [.16, 'scale(1.2)', 0], [.26, 'scale(.3)', 0], [.28, 'scale(1)', 1], [.34, 'scale(1.2)', 0], [.44, 'scale(.3)', 0], [.46, 'scale(1.3)', 1], [.54, 'scale(1.5)', 0], [.66, 'translate(10px,24px) scale(.3)', 0], [.68, 'translate(10px,24px) scale(1.7)', 1], [.8, 'translate(10px,24px) scale(2)', 0], [1, 'scale(.3)', 0]],
+  }},
+  magic: { dur: 1500, parts: {
+    rig:   [[0], [.25, 'translateY(-14px)'], [.82, 'translateY(-14px)'], [1]],
+    upper: [[0], [.25, 'rotate(-6deg)'], [.6, 'rotate(-6deg)'], [.68, 'rotate(8deg)'], [.86, 'rotate(6deg)'], [1]],
+    armF:  [[0], [.25, 'rotate(160deg)'], [.6, 'rotate(160deg)'], [.68, 'rotate(-80deg)'], [.86, 'rotate(-80deg)'], [1]],
+    wpn:   [[0], [.25, 'rotate(-160deg)'], [.6, 'rotate(-160deg)'], [.68, 'rotate(-200deg)'], [.86, 'rotate(-200deg)'], [1]],
+    armB:  [[0], [.25, 'rotate(-70deg)'], [.86, 'rotate(-70deg)'], [1]],
+    legF:  [[0], [.25, 'rotate(-12deg)'], [.86, 'rotate(-12deg)'], [1]],
+    legB:  [[0], [.25, 'rotate(14deg)'], [.86, 'rotate(14deg)'], [1]],
+    ring:  [[0, 'scale(.2) rotate(0deg)', 0], [.25, 'scale(.2) rotate(0deg)', 0], [.4, 'scale(1) rotate(90deg)', 1], [.68, 'scale(1.1) rotate(220deg)', 1], [.86, 'scale(1.3) rotate(300deg)', 0], [1, 'scale(1.3)', 0]],
+    beam:  [[0, 'scaleX(0)', 0], [.66, 'scaleX(0)', 0], [.72, 'scaleX(1)', 1], [.84, 'scaleX(1) scaleY(1.4)', 1], [.92, 'scaleX(1) scaleY(.2)', 0], [1, 'scaleX(0)', 0]],
+  }},
+  spin: { dur: 1100, parts: {
+    rig:   [[0], [.2, 'translateX(-6px)'], [.4, 'translateX(10px) translateY(-26px)'], [.62, 'translateX(50px)'], [.84, 'translateX(50px)'], [1]],
+    spin:  [[0], [.2], [.62, 'rotate(720deg)'], [1, 'rotate(720deg)']],
+    armF:  [[0], [.2, 'rotate(140deg)'], [.4, 'rotate(-90deg)'], [.84, 'rotate(-80deg)'], [1]],
+    wpn:   [[0], [.2, 'rotate(120deg)'], [.84, 'rotate(120deg)'], [1]],
+    armB:  [[0], [.2, 'rotate(30deg)'], [.4, 'rotate(90deg)'], [.84, 'rotate(40deg)'], [1]],
+    legF:  [[0], [.3, 'rotate(-40deg)'], [.55, 'rotate(-40deg)'], [.62, 'rotate(-30deg)'], [.84, 'rotate(-30deg)'], [1]],
+    legB:  [[0], [.3, 'rotate(40deg)'], [.55, 'rotate(40deg)'], [.62, 'rotate(25deg)'], [.84, 'rotate(25deg)'], [1]],
+    slash: [[0, 'scale(.6)', 0], [.56, 'scale(.6)', 0], [.62, 'scale(1)', .95], [.82, 'scale(1.1)', 0], [1, 'scale(1.1)', 0]],
+  }},
+};
+
+function frames(list) {
+  return list.map(([o, t, op]) => { const k = { offset: o, transform: t || 'none', easing: 'ease-in-out' }; if (op !== undefined) k.opacity = op; return k; });
+}
+function idle(svg) {
+  const q = s => svg.querySelector(s), o = { duration: 1600, iterations: Infinity, easing: 'ease-in-out' };
+  const a = [
+    q('.upper')?.animate([{ transform: 'translateY(0)' }, { transform: 'translateY(3px)' }, { transform: 'translateY(0)' }], o),
+    q('.head')?.animate([{ transform: 'rotate(-2deg)' }, { transform: 'rotate(2deg)' }, { transform: 'rotate(-2deg)' }], { ...o, duration: 3200 }),
+    q('.armF')?.animate([{ transform: 'rotate(-5deg)' }, { transform: 'rotate(4deg)' }, { transform: 'rotate(-5deg)' }], o),
+    q('.armB')?.animate([{ transform: 'rotate(5deg)' }, { transform: 'rotate(-4deg)' }, { transform: 'rotate(5deg)' }], o),
+    ...[...svg.querySelectorAll('.tail')].map(t => t.animate([{ transform: 'rotate(-6deg) scaleX(1)' }, { transform: 'rotate(8deg) scaleX(.9)' }, { transform: 'rotate(-6deg) scaleX(1)' }], { ...o, duration: 700 })),
+  ];
+  return a.filter(Boolean);
+}
+
+/* ---------- 画面 ---------- */
+const thumbs = document.getElementById('thumbs'), big = document.getElementById('big'), info = document.getElementById('info');
+let cur = 0, idleAnims = [], busy = false;
+
+CH.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.className = 'thumb';
+  b.innerHTML = svgChara(c, '30 -30 150 290') + `<b>${c.name}</b><small>${c.kind}</small>`;
+  b.onclick = () => pick(i);
+  thumbs.appendChild(b);
+  idle(b.querySelector('svg'));
+});
+
+function pick(i) {
+  cur = i; busy = false;
+  [...thumbs.children].forEach((t, j) => t.classList.toggle('on', j === i));
+  const c = CH[i];
+  big.innerHTML = svgChara(c, '-10 -40 290 300');
+  idleAnims = idle(big.querySelector('svg'));
+  info.innerHTML = `<h2>${c.name}<small>${c.kind}</small></h2><dl>
+    <dt>名前の由来</dt><dd>${c.from}</dd>
+    <dt>得意な動き</dt><dd>${c.move}</dd>
+    <dt>合う技名</dt><dd>${c.waza}</dd></dl>`;
+}
+
+document.getElementById('atk').onclick = async () => {
+  if (busy) return;
+  busy = true;
+  const svg = big.querySelector('svg'), set = ATK[CH[cur].attack];
+  idleAnims.forEach(a => a.cancel());
+  const runs = Object.entries(set.parts).map(([part, list]) => {
+    const el = svg.querySelector('.' + part);
+    return el ? el.animate(frames(list), { duration: set.dur }).finished : null;
+  }).filter(Boolean);
+  await Promise.all(runs).catch(() => {});
+  if (svg.isConnected) idleAnims = idle(svg);
+  busy = false;
+};
+document.getElementById('qbtn').onclick = e => {
+  const on = document.getElementById('stage').classList.toggle('withq');
+  e.target.textContent = on ? '問題を外す' : '問題を重ねる';
+};
+pick(0);
+</script>
+</body>
+</html>
