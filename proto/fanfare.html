@@ -174,6 +174,45 @@ html.view-quiz #gallery, html.view-gallery #quiz, html.view-gallery #count, html
   text-shadow: 2px 2px 0 #000; letter-spacing: .1em; animation: label 1.8s .25s ease-out both; }
 .kan { position: absolute; left: 8%; top: calc(60px + env(safe-area-inset-top)); font-size: 40px; font-weight: 900; color: #ffeb3b; -webkit-text-stroke: 2px #000; animation: label 1s ease-out both; }
 
+
+/* ===== 友情コンボ・必殺技（モンスト風の試作） ===== */
+#fx { position: fixed; inset: 0; z-index: 5; pointer-events: none; overflow: hidden; }
+.ybg { position: absolute; inset: 0; background: radial-gradient(circle at 50% 55%, rgba(30,15,80,.35), rgba(10,5,40,.85)); }
+.friend { position: absolute; width: 58px; filter: drop-shadow(0 0 6px #fff) drop-shadow(0 0 14px #80d8ff); }
+.friend .clawd, .ball .clawd, .hcl .clawd { display: block; width: 100%; height: auto; }
+.ball { position: absolute; left: 0; top: 0; width: 66px; z-index: 3; filter: drop-shadow(0 0 8px #fff176) drop-shadow(0 0 18px #ff9800); }
+.ring { position: absolute; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; border: 5px solid #fff; box-shadow: 0 0 14px #fff, 0 0 26px var(--c); }
+.beam { position: absolute; border-radius: 999px; mix-blend-mode: screen; }
+.boom { position: absolute; border-radius: 50%; background: radial-gradient(circle, #fff 0 14%, #fff59d 26%, #ffb300 42%, rgba(255,87,34,.75) 58%, rgba(255,87,34,0) 71%); }
+.spark { position: absolute; width: 9px; height: 9px; margin: -4px 0 0 -4px; border-radius: 50%; background: #fff; box-shadow: 0 0 8px var(--c), 0 0 18px var(--c); }
+.ylabel { position: absolute; left: 0; right: 0; top: calc(50px + env(safe-area-inset-top)); text-align: center; font-weight: 900; font-size: 28px; white-space: nowrap;
+  color: #fff; -webkit-text-stroke: 1.5px #1565c0; text-shadow: 0 3px 0 #1565c0, 0 0 16px #80d8ff; font-style: italic; }
+.ylabel b { font-size: 40px; color: #ffeb3b; -webkit-text-stroke-color: #e65100; text-shadow: 0 3px 0 #e65100, 0 0 16px #ffeb3b; }
+.hdark { position: absolute; inset: 0; background: #05030f; }
+.hlines { position: absolute; left: -50%; width: 200%; height: 200%;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(255,255,255,.6) 0deg .7deg, transparent .7deg 5deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 70px, #000 260px); mask: radial-gradient(circle at 50% 50%, transparent 70px, #000 260px); }
+.hband { position: absolute; left: -15%; right: -15%; top: 40%; height: 150px; margin-top: -75px; display: flex; align-items: center; overflow: hidden;
+  background: repeating-linear-gradient(100deg, rgba(255,255,255,.18) 0 14px, transparent 14px 40px), linear-gradient(90deg, #d84315, #ffb300 45%, #ff6f00);
+  box-shadow: 0 0 0 4px #fff, 0 0 0 7px #d84315, 0 0 40px #ffb300; }
+.hcl { width: 104px; flex: none; margin-left: 14%; filter: drop-shadow(4px 4px 0 #7f2704); }
+.hname { flex: 1; padding-left: 8px; font-size: clamp(24px, 7.2vw, 54px); font-weight: 900; font-style: italic; color: #fff; white-space: nowrap;
+  -webkit-text-stroke: 7px #7f0000; paint-order: stroke fill; text-shadow: 4px 5px 0 #3e0000; }
+.hsub { position: absolute; left: 0; right: 0; top: calc(40% + 92px); text-align: center; font-size: 15px; font-weight: 900; color: #ffe082; letter-spacing: .3em; }
+.hflash { position: absolute; inset: 0; background: #fff; }
+.wave { position: absolute; width: 100px; height: 100px; margin: -50px 0 0 -50px; border-radius: 50%; border: 12px solid rgba(255,255,255,.95); box-shadow: 0 0 30px #ffeb3b, inset 0 0 30px #ffeb3b; }
+.charge { position: absolute; width: 80px; height: 80px; margin: -40px 0 0 -40px; border-radius: 50%; border: 4px solid #ffe082; box-shadow: 0 0 20px #ffb300; }
+.pillar { position: absolute; top: -10%; bottom: -10%; width: 150px; margin-left: -75px; background: linear-gradient(90deg, rgba(255,235,59,0), #fff59d 30%, #fff 50%, #fff59d 70%, rgba(255,235,59,0)); }
+.hwin { position: absolute; left: 0; right: 0; text-align: center; font-weight: 900; font-size: 52px; color: #ffeb3b; font-style: italic; white-space: nowrap;
+  -webkit-text-stroke: 2px #b71c1c; text-shadow: 0 5px 0 #7f0000, 0 0 30px #fff; }
+.gauge { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 900; color: #e65100; background: rgba(255,255,255,.8); border-radius: 999px; padding: 2px 8px; }
+.gauge i { display: inline-block; width: 12px; height: 10px; border-radius: 3px; background: #e0d6c6; }
+.gauge i.on { background: linear-gradient(#ffd54f, #ff8f00); }
+.gauge.full { animation: gfull .6s ease-in-out infinite alternate; }
+.gauge.full i { background: linear-gradient(#fff59d, #ff3d00); }
+@keyframes gfull { from { box-shadow: 0 0 0 #ff9800; } to { box-shadow: 0 0 14px #ff9800; transform: scale(1.06); } }
+html.view-gallery #gauge { display: none; }
+
 /* ふつうの Clawd（出番のないとき） */
 .idle .home { display: block; }
 .busy .home { display: none; }
@@ -182,10 +221,12 @@ html.view-quiz #gallery, html.view-gallery #quiz, html.view-gallery #count, html
 </head>
 <body class="idle">
 <div id="stage"><div class="home" id="home"></div></div>
+<div id="fx"></div>
 
 <div class="top">
   <span class="count" id="count"></span>
   <span class="combo" id="combo"></span>
+  <span class="gauge" id="gauge" title="必殺技のゲージ">必殺</span>
   <span class="sp"></span>
   <button id="mode" class="mode">解いてみる</button>
   <button id="gear" aria-label="設定">⚙</button>
@@ -203,6 +244,16 @@ html.view-quiz #gallery, html.view-gallery #quiz, html.view-gallery #count, html
 
 <div class="panel gallery" id="gallery">
   <div class="gtitle">見るだけモード：タップすると演出が出るよ</div>
+  <h4>モンスト風（友情コンボ・必殺技）</h4>
+  <div class="grid">
+    <button data-g="y2">友情コンボ（2連続）</button>
+    <button data-g="y5">友情コンボ（5連続）</button>
+    <button data-g="y10">友情コンボ（10連続）</button>
+    <button data-g="h">必殺技</button>
+    <button data-g="hw">苦手を撃破で必殺技</button>
+    <button data-g="mall" class="all">流れで見る</button>
+  </div>
+  <h4>お祝いのパターン</h4>
   <div class="grid" id="gpats"></div>
   <h4>特別なとき</h4>
   <div class="grid">
@@ -244,7 +295,7 @@ const Q = [
 ];
 
 const PATS = [['auto', 'おまかせ'], ['podium', 'お立ち台'], ['kusudama', 'くす玉'], ['hanabi', '花火'], ['doage', '胴上げ'], ['medal', '表彰式'], ['gougai', '号外'], ['mie', '見得']];
-const S = { i: 0, combo: 0, right: 0, pat: 'auto', level: 1.6, sound: 1, turn: 0, timer: 0 };
+const S = { i: 0, combo: 0, right: 0, g: 0, pat: 'auto', level: 1.6, sound: 1, turn: 0, timer: 0 };
 const $ = id => document.getElementById(id);
 const stage = $('stage');
 const COLORS = ['#e53935', '#ffb300', '#43a047', '#1e88e5', '#d81b60', '#fdd835', '#8e24aa', '#00acc1'];
@@ -386,10 +437,155 @@ function celebrate({ weak = false, finale = false, pat = null, combo = S.combo, 
     const name = pat || (S.pat === 'auto' ? ORDER[S.turn++ % ORDER.length] : S.pat);
     html = P[name](p) + label(p, combo);
   }
-  stage.querySelectorAll('.show').forEach(n => n.remove());
+  stage.querySelectorAll('.show').forEach(n => n.remove()); fx.innerHTML = '';
   stage.insertAdjacentHTML('beforeend', `<div class="show">${html}</div>`);
   document.body.className = 'busy';
   S.timer = setTimeout(() => { stage.querySelectorAll('.show').forEach(n => n.remove()); document.body.className = 'idle'; }, finale ? 3200 : 2300);
+}
+
+
+// ===== 友情コンボ・必殺技（モンスト風の試作。見た目と名前は Clawd のオリジナル） =====
+const fx = $('fx');
+const WAZA = ['論点ブレイク', '条文スラッシュ', '六法インパクト', 'Clawd バスター', '判例メテオ'];
+function sweep(f1, f2, t0, dur, type = 'sawtooth', vol = .1) {
+  const c = ac(); if (!c || !S.sound) return;
+  const o = c.createOscillator(), g = c.createGain(); o.type = type;
+  o.frequency.setValueAtTime(f1, c.currentTime + t0); o.frequency.exponentialRampToValueAtTime(f2, c.currentTime + t0 + dur);
+  g.gain.setValueAtTime(vol, c.currentTime + t0); g.gain.exponentialRampToValueAtTime(.001, c.currentTime + t0 + dur);
+  o.connect(g).connect(c.destination); o.start(c.currentTime + t0); o.stop(c.currentTime + t0 + dur + .05);
+}
+function mk(parent, cls, css = {}, html = '') {
+  const d = document.createElement('div'); d.className = cls;
+  for (const [k, v] of Object.entries(css)) k.startsWith('--') ? d.style.setProperty(k, v) : (d.style[k] = v);
+  d.innerHTML = html; parent.appendChild(d); return d;
+}
+const anim = (n, f, o) => n.animate(f, Object.assign({ fill: 'both', easing: 'ease-out' }, o));
+const stageH = () => (view === 'gallery' ? $('gallery') : $('quiz')).getBoundingClientRect().top;
+function shake(px, ms = 450) {
+  if (S.level < 1) return;
+  const f = []; for (let i = 0; i < 9; i++) f.push({ transform: `translate(${rnd(-px, px)}px,${rnd(-px, px)}px)` }); f.push({ transform: 'none' });
+  [stage, fx, ...document.querySelectorAll('.panel')].forEach(n => n.animate(f, { duration: ms, easing: 'linear' }));
+}
+function startShow(ms) {
+  clearTimeout(S.timer); fx.innerHTML = '';
+  stage.querySelectorAll('.show').forEach(n => n.remove());
+  const box = mk(stage, 'show'); document.body.className = 'busy';
+  S.timer = setTimeout(() => { box.remove(); fx.innerHTML = ''; document.body.className = 'idle'; }, ms);
+  return box;
+}
+function sparks(box, x, y, n, R, colors, dur = 700) {
+  for (let i = 0; i < n; i++) {
+    const a = rnd(0, Math.PI * 2), r = rnd(R * .4, R), sp = mk(box, 'spark', { left: x + 'px', top: y + 'px', '--c': pick(colors) });
+    anim(sp, [{ transform: 'translate(0,0) scale(1.4)', opacity: 1 }, { transform: `translate(${Math.cos(a) * r}px,${Math.sin(a) * r}px) scale(.2)`, opacity: 0 }], { duration: dur * rnd(.7, 1.2), easing: 'cubic-bezier(.1,.8,.3,1)' });
+  }
+}
+
+// 友情：弾になった Clawd が仲間に当たると、仲間が技を撃つ
+const YCOL = { laser: '#40c4ff', cross: '#ff4081', bomb: '#ff9100', all: '#ffd600' };
+function beam(box, c, css, axis) {
+  const dir = axis === 'X' ? '180deg' : '90deg';
+  const b = mk(box, 'beam', Object.assign({ background: `linear-gradient(${dir}, rgba(255,255,255,0), ${c} 25%, #fff 50%, ${c} 75%, rgba(255,255,255,0))`, boxShadow: `0 0 24px ${c}, 0 0 48px ${c}` }, css));
+  const other = axis === 'X' ? 'Y' : 'X';
+  anim(b, [{ transform: `scale${axis}(0)`, opacity: 1 }, { transform: `scale${axis}(1) scale${other}(1.5)`, opacity: 1, offset: .25 }, { transform: `scale${axis}(1) scale${other}(1)`, opacity: 1, offset: .6 }, { transform: `scale${axis}(1) scale${other}(.1)`, opacity: 0 }], { duration: 650 });
+}
+function fire(box, kind, [x, y], friend, W, H) {
+  if (!box.isConnected) return;
+  const c = YCOL[kind];
+  anim(friend, [{ transform: 'translate(-50%,-50%) scale(1)' }, { transform: 'translate(-50%,-50%) scale(1.5)' }, { transform: 'translate(-50%,-50%) scale(1)' }], { duration: 300 });
+  const ring = mk(box, 'ring', { left: x + 'px', top: y + 'px', '--c': c });
+  anim(ring, [{ transform: 'scale(.3)', opacity: 1 }, { transform: 'scale(3.2)', opacity: 0 }], { duration: 450 });
+  const th = 30 * Math.min(S.level, 1.6);
+  if (kind === 'laser' || kind === 'cross') {
+    beam(box, c, { left: '0', width: W + 'px', top: (y - th / 2) + 'px', height: th + 'px', transformOrigin: `${x}px 50%` }, 'X');
+    sweep(1800, 250, 0, .45, 'sawtooth', .07);
+  }
+  if (kind === 'cross') {
+    beam(box, c, { top: '0', height: H + 'px', left: (x - th / 2) + 'px', width: th + 'px', transformOrigin: `50% ${y}px` }, 'Y');
+    sweep(2400, 400, .05, .4, 'square', .05);
+  }
+  if (kind === 'bomb') {
+    [[x, y, 1], [x + rnd(-90, 90), y + rnd(-60, 30), .7], [x + rnd(-90, 90), y + rnd(-60, 30), .6]].forEach(([bx, by, sc], i) => {
+      const R = 230 * sc * Math.min(S.level, 1.6), b = mk(box, 'boom', { left: (bx - R / 2) + 'px', top: (by - R / 2) + 'px', width: R + 'px', height: R + 'px' });
+      anim(b, [{ transform: 'scale(.1)', opacity: 1 }, { transform: 'scale(1)', opacity: 1, offset: .4 }, { transform: 'scale(1.15)', opacity: 0 }], { duration: 600, delay: i * 120 });
+      noise(i * .12, .5, .4, 140, .7);
+    });
+    sparks(box, x, y, 18, 150, ['#ffeb3b', '#ff9100', '#fff']);
+    shake(8, 350);
+  }
+  if (kind === 'all') {
+    const L = Math.hypot(W, H);
+    for (let i = 0; i < 12; i++) {
+      const b = mk(box, 'beam', { left: x + 'px', top: (y - 8) + 'px', width: L + 'px', height: '16px', transformOrigin: '0 50%',
+        background: `linear-gradient(180deg, rgba(255,255,255,0), ${c}, #fff, ${c}, rgba(255,255,255,0))`, boxShadow: `0 0 20px ${c}` });
+      const r = i * 30 + 15;
+      anim(b, [{ transform: `rotate(${r}deg) scaleX(0)`, opacity: 1 }, { transform: `rotate(${r + 10}deg) scaleX(1)`, opacity: 1, offset: .35 }, { transform: `rotate(${r + 20}deg) scaleX(1)`, opacity: 0 }], { duration: 700 });
+    }
+    sparks(box, x, y, 24, 180, ['#ffd600', '#fff', '#40c4ff']);
+    [0, .08, .16].forEach(t => sweep(3000, 600, t, .35, 'square', .04));
+    shake(10, 450);
+  }
+}
+function yujo(combo) {
+  const lv = combo >= 10 ? 3 : combo >= 5 ? 2 : 1;
+  const box = startShow(lv === 3 ? 2600 : 2200);
+  const W = innerWidth, H = stageH();
+  const bg = mk(box, 'ybg'); anim(bg, [{ opacity: 0 }, { opacity: 1, offset: .1 }, { opacity: 1, offset: .8 }, { opacity: 0 }], { duration: lv === 3 ? 2500 : 2100 });
+  const spots = [[.2, .38], [.8, .36], [.2, .78], [.8, .8]].map(([x, y]) => [x * W, y * H]);
+  const kinds = lv === 1 ? ['laser'] : lv === 2 ? ['cross', 'bomb'] : ['laser', 'cross', 'bomb', 'all'];
+  const fr = kinds.map((k, i) => {
+    const [x, y] = spots[i], f = mk(box, 'friend', { left: x + 'px', top: y + 'px' }, clawd());
+    anim(f, [{ transform: 'translate(-50%,-50%) scale(0)' }, { transform: 'translate(-50%,-50%) scale(1)' }], { duration: 250, delay: i * 50, easing: 'cubic-bezier(.3,1.7,.5,1)' });
+    return f;
+  });
+  const pts = [[W / 2, H * .9], ...spots.slice(0, kinds.length), [W / 2, H * .55]];
+  const seg = lv === 3 ? 170 : 210, t0 = 280, run = seg * (pts.length - 1);
+  const frames = pts.map(([x, y], i) => ({ transform: `translate(${x}px,${y}px) translate(-50%,-50%) rotate(${i * 200}deg)`, offset: i / (pts.length - 1) }));
+  for (let j = 4; j >= 0; j--) {
+    const op = j ? .45 - j * .08 : 1, b = mk(box, 'ball', { opacity: 0 }, happy());
+    anim(b, frames, { duration: run, delay: t0 + j * 28, easing: 'linear' });
+    anim(b, [{ opacity: op }, { opacity: op, offset: .85 }, { opacity: 0 }], { duration: run + 300, delay: t0 + j * 28, fill: 'forwards' });
+  }
+  sweep(300, 900, t0 / 1000, .25, 'square', .05);
+  kinds.forEach((k, i) => setTimeout(() => fire(box, k, spots[i], fr[i], W, H), t0 + seg * (i + 1)));
+  const lab = mk(box, 'ylabel', {}, `友情コンボ <b>×${combo}</b>`);
+  anim(lab, [{ transform: 'translateX(-100%) skewX(-15deg)', opacity: 0 }, { transform: 'translateX(0) skewX(-15deg)', opacity: 1, offset: .12 }, { transform: 'skewX(-15deg) scale(1.05)', opacity: 1, offset: .85 }, { opacity: 0 }], { duration: 1900, delay: 200 });
+}
+
+// 必殺技：暗転 → カットイン → ためて → 炸裂
+function hissatsu({ weak = false } = {}) {
+  const big = S.level >= 1, T = 2900;
+  startShow(T + 100);
+  const W = innerWidth, cy = stageH() * .5, name = pick(WAZA);
+  const dark = mk(fx, 'hdark'); anim(dark, [{ opacity: 0 }, { opacity: big ? .9 : .6, offset: .06 }, { opacity: big ? .9 : .6, offset: .7 }, { opacity: 0 }], { duration: T });
+  const lines = mk(fx, 'hlines', { top: `calc(${cy}px - 100%)` });
+  anim(lines, [{ opacity: 0, transform: 'scale(1.6) rotate(0)' }, { opacity: 1, transform: 'scale(1) rotate(4deg)', offset: .15 }, { opacity: 1, offset: .55 }, { opacity: 0, transform: 'scale(1) rotate(10deg)' }], { duration: 1500, delay: 80 });
+  const band = mk(fx, 'hband', {}, `<div class="hcl">${clawd({ face: 'smile', arms: 'up' })}</div><div class="hname">${name}！</div>`);
+  const sk = 'skewY(-7deg)';
+  anim(band, [{ transform: `${sk} scaleY(0)` }, { transform: `${sk} scaleY(1.15)`, offset: .1 }, { transform: `${sk} scaleY(1)`, offset: .16 }, { transform: `${sk} scaleY(1)`, offset: .86 }, { transform: `${sk} scaleY(0)` }], { duration: 1150, delay: 150 });
+  anim(band.querySelector('.hcl'), [{ transform: 'translateX(110vw) scale(1.3)' }, { transform: 'translateX(0) scale(1)', offset: .18 }, { transform: 'translateX(-5vw)', offset: .86 }, { transform: 'translateX(-110vw)' }], { duration: 1150, delay: 150 });
+  anim(band.querySelector('.hname'), [{ transform: 'translateX(-110vw)', opacity: 0 }, { transform: 'translateX(4vw)', opacity: 1, offset: .22 }, { transform: 'translateX(0)', offset: .3 }, { transform: 'translateX(-2vw)', offset: .86 }, { transform: 'translateX(0) scale(1.5)', opacity: 0 }], { duration: 1150, delay: 150 });
+  const sub = mk(fx, 'hsub', {}, weak ? '苦手を撃破' : '必殺技');
+  anim(sub, [{ opacity: 0 }, { opacity: 1, offset: .2 }, { opacity: 1, offset: .8 }, { opacity: 0 }], { duration: 1100, delay: 250 });
+  noise(.15, .25, .25, 4000, .6); sweep(1200, 3200, .15, .2, 'square', .06);
+  setTimeout(() => {
+    if (!fx.contains(dark)) return;
+    for (let i = 0; i < 4; i++) { const c = mk(fx, 'charge', { left: W / 2 + 'px', top: cy + 'px' }); anim(c, [{ transform: 'scale(4)', opacity: 0 }, { transform: 'scale(2)', opacity: 1, offset: .4 }, { transform: 'scale(0)', opacity: 1 }], { duration: 380, delay: i * 70, easing: 'ease-in' }); }
+    const me = mk(fx, 'friend', { left: W / 2 + 'px', top: cy + 'px', width: '90px', filter: 'drop-shadow(0 0 12px #fff) drop-shadow(0 0 30px #ffb300)' }, happy());
+    anim(me, [{ transform: 'translate(-50%,-50%) scale(0)' }, { transform: 'translate(-50%,-50%) scale(1.1)', offset: .5 }, { transform: 'translate(-50%,-50%) scale(.9)', offset: .9 }, { transform: 'translate(-50%,-50%) scale(1.8)', opacity: 0 }], { duration: 560 });
+    sweep(150, 1600, 0, .55, 'sawtooth', .06);
+  }, 1300);
+  setTimeout(() => {
+    if (!fx.contains(dark)) return;
+    const fl = mk(fx, 'hflash'); anim(fl, [{ opacity: 1 }, { opacity: 0 }], { duration: 500 });
+    for (let i = 0; i < 3; i++) { const w = mk(fx, 'wave', { left: W / 2 + 'px', top: cy + 'px' }); anim(w, [{ transform: 'scale(.2)', opacity: 1 }, { transform: `scale(${9 + i * 3})`, opacity: 0 }], { duration: 800, delay: i * 120, easing: 'cubic-bezier(.1,.7,.3,1)' }); }
+    const pl = mk(fx, 'pillar', { left: W / 2 + 'px' }); anim(pl, [{ transform: 'scaleX(0)', opacity: 1 }, { transform: 'scaleX(1.6)', opacity: 1, offset: .2 }, { transform: 'scaleX(.2)', opacity: 0 }], { duration: 900 });
+    sparks(fx, W / 2, cy, big ? 50 : 20, Math.max(W, 400) * .7, ['#ffeb3b', '#ff9100', '#fff', '#ff4081', '#40c4ff'], 1000);
+    const win = mk(fx, 'hwin', { top: (cy - 34) + 'px' }, weak ? '苦手 撃破！' : '撃破！');
+    anim(win, [{ transform: 'scale(3)', opacity: 0 }, { transform: 'scale(.9)', opacity: 1, offset: .12 }, { transform: 'scale(1)', offset: .2 }, { transform: 'scale(1)', opacity: 1, offset: .8 }, { transform: 'scale(1.2)', opacity: 0 }], { duration: 1100 });
+    noise(0, 1.1, .6, 110, .5); sweep(120, 35, 0, .8, 'sine', .5); noise(0, .3, .3, 2500, .5);
+    [1568, 2093, 2637].forEach((f, i) => tone(f, .35 + i * .08, .4, 'sine', .05));
+    shake(big ? 16 : 6, 600);
+  }, 1850);
 }
 
 function bigMark(kind) {
@@ -411,6 +607,10 @@ function show() {
   $('why').style.display = 'none'; $('btns').style.display = 'flex'; $('next').style.display = 'none';
   $('count').textContent = `${S.right} 正解`;
 }
+function setGauge() {
+  const g = $('gauge'); g.innerHTML = '必殺' + [0, 1, 2, 3].map(i => `<i class="${i < S.g ? 'on' : ''}"></i>`).join('');
+  g.classList.toggle('full', S.g >= 4);
+}
 function setCombo() {
   const c = $('combo');
   c.textContent = S.combo >= 2 ? `${S.combo} 連続` : '';
@@ -422,7 +622,10 @@ function answer(a) {
     S.combo++; S.right++; setCombo();
     SND.o(); bigMark('o');
     const last = S.i === Q.length - 1;
-    celebrate({ weak: q.weak, finale: last });
+    if (last) celebrate({ finale: true });
+    else if (q.weak || S.g >= 4) { S.g = 0; hissatsu({ weak: q.weak }); }   // 苦手を当てたか、ゲージが満タンなら必殺技
+    else { S.g++; if (S.combo >= 2) yujo(S.combo); else celebrate({}); }   // 2連続から友情コンボ
+    setGauge();
     if (last) { finish(); return; }
     S.i++; show();                       // 待たずに次の問題
   } else {
@@ -441,7 +644,7 @@ function finish() {
 }
 $('btns').addEventListener('click', e => { const b = e.target.closest('button'); if (b) answer(b.dataset.a); });
 $('next').addEventListener('click', () => {
-  if ($('next').textContent === 'もう一度') { Object.assign(S, { i: 0, combo: 0, right: 0 }); $('next').textContent = '次へ'; setCombo(); show(); return; }
+  if ($('next').textContent === 'もう一度') { Object.assign(S, { i: 0, combo: 0, right: 0, g: 0 }); setGauge(); $('next').textContent = '次へ'; setCombo(); show(); return; }
   if (S.i === Q.length - 1) { finish(); return; }
   S.i++; show();
 });
@@ -464,7 +667,7 @@ if (matchMedia('(prefers-reduced-motion: reduce)').matches) S.level = 0.5;
 // ---------- 見るだけモード ----------
 let view = 'gallery', allTimer = 0;
 function setView(v) {
-  view = v; clearInterval(allTimer);
+  view = v; clearInterval(allTimer); clearTimeout(allTimer);
   document.documentElement.className = 'view-' + v;   // body は演出の出入りで class が変わるので html に付ける
   $('mode').textContent = v === 'gallery' ? '解いてみる' : '見るだけ';
 }
@@ -477,21 +680,31 @@ function demo(g) {
   if (g === 'weak') celebrate({ weak: true, pat: pick(ORDER) });
   else if (g === 'c5') celebrate({ combo: 5, pat: pick(ORDER) });
   else if (g === 'c10') celebrate({ combo: 10, pat: pick(ORDER) });
+  else if (g === 'y2') yujo(2);
+  else if (g === 'y5') yujo(5);
+  else if (g === 'y10') yujo(10);
+  else if (g === 'h') hissatsu();
+  else if (g === 'hw') hissatsu({ weak: true });
   else if (g === 'finale') celebrate({ finale: true, score: '10 / 10' });
   else celebrate({ pat: g, combo: 0 });
 }
 $('gallery').addEventListener('click', e => {
   const b = e.target.closest('[data-g]'); if (!b) return;
-  clearInterval(allTimer);
+  clearInterval(allTimer); clearTimeout(allTimer);
   if (b.dataset.g === 'all') {
     let n = 0; demo(ORDER[n++]);
     allTimer = setInterval(() => { if (n >= ORDER.length) { clearInterval(allTimer); return; } demo(ORDER[n++]); }, 2500);
     return;
   }
+  if (b.dataset.g === 'mall') {
+    const seq = [['y2', 2400], ['y5', 2400], ['y10', 2800], ['h', 3200]]; let n = 0;
+    const step = () => { if (n >= seq.length) return; const [g, ms] = seq[n++]; demo(g); allTimer = setTimeout(step, ms); };
+    step(); return;
+  }
   demo(b.dataset.g);
 });
 setView(new URLSearchParams(location.search).get('mode') === 'quiz' ? 'quiz' : 'gallery');
-syncSeg(); show();
+syncSeg(); show(); setGauge();
 </script>
 </body>
 </html>
