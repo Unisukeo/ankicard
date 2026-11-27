@@ -1,0 +1,549 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>イラスト風の試し</title>
+<style>
+  :root { --bg:#0d0b16; --ink:#f3f0ff; --sub:#a9a3c8; --acc:#ffb84d; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font-family:system-ui,-apple-system,"Hiragino Sans","Yu Gothic UI",sans-serif; -webkit-tap-highlight-color:transparent; }
+  .wrap { max-width:520px; margin:0 auto; padding:12px 12px 40px; }
+  h1 { font-size:18px; margin:4px 0 2px; }
+  .lead { color:var(--sub); font-size:13px; margin:0 0 10px; line-height:1.6; }
+  .stage { position:relative; width:100%; aspect-ratio:192/136; overflow:hidden; border-radius:14px; background:#000; }
+  .world { position:absolute; inset:0; transform-origin:35% 72%; }
+  .world > canvas, .world > svg { position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #bg { filter:blur(1.6px) saturate(1.1); }
+  #fg { filter:blur(4px); }
+  #glow { mix-blend-mode:screen; }
+  .flat #bg, .flat #fg { filter:none; }
+  .flat #glow, .flat .vig { display:none; }
+  .dark { position:absolute; inset:0; background:#05030c; opacity:0; pointer-events:none; }
+  .vig { position:absolute; inset:0; pointer-events:none; background:radial-gradient(120% 95% at 50% 45%, transparent 55%, rgba(0,0,0,.6) 100%); }
+  .flash { position:absolute; inset:0; background:#fff; opacity:0; pointer-events:none; mix-blend-mode:screen; }
+  .shield { position:absolute; top:13%; transform:translateX(-50%); display:flex; align-items:center; gap:3px; font-weight:900; font-size:13px; color:#fff;
+    background:linear-gradient(#5c7cff,#2a3d9c); border:2px solid #cfd8ff; border-radius:8px 8px 14px 14px; padding:1px 7px; text-shadow:0 1px 0 #000; transition:transform .15s; }
+  .shield.hit { transform:translateX(-50%) scale(1.35); }
+  .shield.broke { background:linear-gradient(#ff6a6a,#8a1d2b); border-color:#ffd0d0; }
+  .num { position:absolute; font-weight:900; font-size:20px; color:#fff; pointer-events:none; white-space:nowrap;
+    -webkit-text-stroke:4px #2a0b10; paint-order:stroke fill; transform:translate(-50%,-50%); }
+  .num.big { font-size:30px; color:#ffe27a; }
+  .word { position:absolute; left:62%; top:40%; transform:translate(-50%,-50%); font-weight:900; font-size:clamp(26px,9vw,46px); letter-spacing:.06em; color:#fff;
+    -webkit-text-stroke:6px #6b0a14; paint-order:stroke fill; pointer-events:none; white-space:nowrap; opacity:0; }
+  .cut { position:absolute; left:0; right:0; top:10%; height:34%; opacity:0; pointer-events:none; overflow:hidden;
+    background:repeating-linear-gradient(100deg, rgba(255,255,255,.07) 0 2px, transparent 2px 22px), linear-gradient(90deg, rgba(12,22,80,.0), rgba(18,34,110,.95) 12%, rgba(18,34,110,.95) 88%, rgba(12,22,80,0));
+    border-top:2px solid rgba(160,200,255,.8); border-bottom:2px solid rgba(160,200,255,.8); }
+  .cut svg { position:absolute; left:4%; top:-8%; height:135%; width:auto; }
+  .cut span { position:absolute; right:6%; top:50%; transform:translateY(-50%); font-weight:900; font-size:clamp(22px,7.5vw,38px); color:#fff; letter-spacing:.15em;
+    -webkit-text-stroke:5px #0b1440; paint-order:stroke fill; white-space:nowrap; }
+  .fps { position:absolute; right:6px; top:4px; font:11px monospace; color:#9f9; opacity:.8; }
+  .quiz { position:absolute; left:5%; right:5%; bottom:5%; background:rgba(255,255,255,.93); color:#222; border-radius:12px; padding:9px 11px; display:none; box-shadow:0 6px 20px rgba(0,0,0,.4); }
+  .withq .quiz { display:block; }
+  .quiz p { margin:0 0 7px; font-size:14px; line-height:1.45; }
+  .quiz .ox { display:flex; gap:8px; } .quiz .ox span { flex:1; text-align:center; padding:6px; border-radius:9px; background:#eee; font-weight:bold; font-size:17px; }
+  .btns { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .btns button { padding:12px 6px; border-radius:12px; border:0; font:inherit; font-weight:bold; font-size:15px; cursor:pointer; }
+  .go { background:var(--acc); color:#2a1a00; } .sp { background:#ff5a6e; color:#fff; } .sub { background:#2e2948; color:var(--ink); }
+  .note { color:var(--sub); font-size:12px; margin-top:12px; line-height:1.7; }
+  .note b { color:var(--ink); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>イラスト風の試し</h1>
+  <p class="lead">ドット絵をやめて、AI が得意な「線と色の絵（ベクター）」でキャラを描いたもの。アニメ塗り（影を1段）で、光・ぼかし・光の粒は HD-2D 風の試作と同じ仕組み。</p>
+  <div class="stage" id="stage">
+    <div class="world" id="world">
+      <canvas id="bg"></canvas>
+      <div class="dark" id="dark"></div>
+      <canvas id="floor"></canvas>
+      <svg id="chars" viewBox="0 0 192 136" preserveAspectRatio="none">
+        <defs>
+          <radialGradient id="iris" cx=".45" cy=".35" r=".75">
+            <stop offset="0" stop-color="#9fd8ff"/><stop offset=".45" stop-color="#3a6fd0"/><stop offset="1" stop-color="#1a2460"/>
+          </radialGradient>
+          <linearGradient id="bladeG" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#bfe6ff"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#8cc4f0"/>
+          </linearGradient>
+          <radialGradient id="foeG" cx=".5" cy=".2" r=".9">
+            <stop offset="0" stop-color="#8a6fd6"/><stop offset=".45" stop-color="#3d2a6e"/><stop offset="1" stop-color="#150e26"/>
+          </radialGradient>
+          <linearGradient id="coatG" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#2a58aa"/><stop offset="1" stop-color="#3a72cc"/>
+          </linearGradient>
+          <!-- 頭（カットインでも使う） -->
+          <g id="headArt" stroke="#1b1530" stroke-linejoin="round" stroke-linecap="round">
+            <path d="M-16,-92 C-19,-110 -4,-119 8,-116 C18,-113 22,-104 20,-96 C14,-94 6,-94 0,-94 C-4,-86 -8,-80 -12,-76 C-16,-80 -17,-86 -16,-92 Z" fill="#2b3770" stroke-width="1.2"/>
+            <path d="M-9,-98 C-6,-104 12,-104 17,-97 C19.5,-90 18,-83 12,-79 C8,-76 2,-76 -2,-78 C-7,-81 -10,-88 -9,-98 Z" fill="#ffdcc0" stroke-width="1.2"/>
+            <path d="M-9,-98 C-2,-100 10,-100 17,-97 L17.4,-93 C10,-96 0,-96 -8.6,-92 Z" fill="#f0b99a" stroke="none"/>
+            <path d="M-2,-78 C-6,-80 -8.5,-84 -9,-88 C-6,-84 -2,-81 3,-79.5 Z" fill="#f0b99a" stroke="none"/>
+            <ellipse cx="-6" cy="-88" rx="3" ry="4.2" fill="#ffdcc0" stroke-width="1"/>
+            <path d="M-6.5,-90 Q-5,-88 -6.5,-86" fill="none" stroke="#e0a080" stroke-width=".7"/>
+            <ellipse cx="4" cy="-88" rx="2.9" ry="4.2" fill="url(#iris)" stroke-width=".8"/>
+            <ellipse cx="13.6" cy="-88" rx="2" ry="3.9" fill="url(#iris)" stroke-width=".8"/>
+            <circle cx="4" cy="-87.3" r="1.2" fill="#0d1238" stroke="none"/>
+            <circle cx="13.7" cy="-87.3" r=".9" fill="#0d1238" stroke="none"/>
+            <circle cx="5" cy="-90" r="1.15" fill="#fff" stroke="none"/><circle cx="3" cy="-86.2" r=".5" fill="#fff" stroke="none"/>
+            <circle cx="14.3" cy="-90" r=".8" fill="#fff" stroke="none"/>
+            <path d="M0.3,-92.4 Q4,-94.8 7.6,-92.2" fill="none" stroke-width="1.5"/>
+            <path d="M11.4,-92.2 Q13.8,-94 15.8,-92" fill="none" stroke-width="1.3"/>
+            <path d="M0,-96.2 Q4,-98.2 8,-96.8" fill="none" stroke="#2b3770" stroke-width="1.1"/>
+            <path d="M11,-96.8 Q14,-97.8 16.6,-96.2" fill="none" stroke="#2b3770" stroke-width="1.1"/>
+            <path d="M17.8,-86 l1.2,1.9 -1.5,.2" fill="none" stroke="#d99a7c" stroke-width=".8"/>
+            <path d="M10.8,-80.8 Q13,-79.6 15.2,-80.9" fill="none" stroke="#8a3a3a" stroke-width=".9"/>
+            <ellipse cx="5.5" cy="-83" rx="2.3" ry="1" fill="#ff9aa6" opacity=".5" stroke="none"/>
+            <path d="M-10,-96 C-10,-108 4,-114 14,-110 C19,-108 22,-102 21,-95 L18.4,-98 L17.2,-90.5 L13.4,-99 L10.6,-92.4 L8.2,-100 L4.4,-93.4 L2,-100 L-2.6,-93 L-4,-99 Z" fill="#2b3770" stroke-width="1.1"/>
+            <path d="M-3,-108.5 C3,-112 10,-112 15.5,-108.6" fill="none" stroke="#6a86d6" stroke-width="1.7" opacity=".9"/>
+            <path d="M-11,-101 C-2,-106 12,-106 20.3,-101.6 L20.6,-98.4 C12,-102.6 -2,-102.6 -11,-97.6 Z" fill="#d8393f" stroke-width=".9"/>
+            <path d="M-4,-103.4 C4,-105.4 12,-105 18,-102.6" fill="none" stroke="#ff8a8a" stroke-width=".8" opacity=".9"/>
+            <circle cx="-12" cy="-99.5" r="2.4" fill="#b02a34" stroke-width=".8"/>
+          </g>
+        </defs>
+
+        <!-- 敵 -->
+        <g id="foe">
+          <ellipse cx="0" cy="8" rx="26" ry="4" fill="#000" opacity=".4" id="foeShadow"/>
+          <g id="foeBody" stroke="#0d0818" stroke-linejoin="round">
+            <g id="clawB"><path d="M-28,-62 C-40,-58 -48,-46 -50,-32 L-46,-34 L-44,-26 L-41,-34 L-37,-30 L-37,-40 C-34,-48 -30,-52 -24,-54 Z" fill="#2a1d48" stroke-width="1.2"/></g>
+            <g id="clawF"><path d="M28,-62 C40,-58 48,-46 50,-32 L46,-34 L44,-26 L41,-34 L37,-30 L37,-40 C34,-48 30,-52 24,-54 Z" fill="#33245a" stroke-width="1.2"/></g>
+            <path d="M-13,-94 C-24,-104 -28,-118 -22,-130 C-18,-116 -10,-108 -4,-100 Z" fill="#241a3e" stroke-width="1.2"/>
+            <path d="M13,-94 C24,-104 28,-118 22,-130 C18,-116 10,-108 4,-100 Z" fill="#241a3e" stroke-width="1.2"/>
+            <path d="M-20,-124 C-19,-116 -14,-110 -9,-104" fill="none" stroke="#6a55a8" stroke-width="1" opacity=".8"/>
+            <path id="foePath" d="M-30,-22 C-40,-52 -34,-86 -12,-98 C-5,-102 5,-102 12,-98 C34,-86 40,-52 30,-22 C25,-12 19,-16 14,-6 C9,-15 3,-10 0,-1 C-3,-10 -9,-15 -14,-6 C-19,-16 -25,-12 -30,-22 Z" fill="url(#foeG)" stroke-width="1.4"/>
+            <path d="M-28,-40 C-34,-62 -28,-84 -10,-94" fill="none" stroke="#b39cf0" stroke-width="1.6" opacity=".55"/>
+            <path d="M-18,-74 L-5,-70 L-7,-63 L-17,-66 Z" fill="#ff4f74" stroke-width="1"/>
+            <path d="M18,-74 L5,-70 L7,-63 L17,-66 Z" fill="#ff4f74" stroke-width="1"/>
+            <path d="M-14,-69 L-8,-67.5" stroke="#fff0f4" stroke-width="1.2"/><path d="M14,-69 L8,-67.5" stroke="#fff0f4" stroke-width="1.2"/>
+            <path d="M-13,-52 C-6,-55 6,-55 13,-52 C9,-41 -9,-41 -13,-52 Z" fill="#120c1c" stroke-width="1"/>
+            <path d="M-10,-52.6 L-7,-47 L-4,-53 L-1,-47 L2,-53 L5,-47 L8,-52.6 Z" fill="#f4f0e8" stroke="none"/>
+          </g>
+          <path id="foeWhite" d="M-30,-22 C-40,-52 -34,-86 -12,-98 C-5,-102 5,-102 12,-98 C34,-86 40,-52 30,-22 C25,-12 19,-16 14,-6 C9,-15 3,-10 0,-1 C-3,-10 -9,-15 -14,-6 C-19,-16 -25,-12 -30,-22 Z" fill="#fff" opacity="0"/>
+        </g>
+
+        <!-- 主人公 -->
+        <g id="hero">
+          <ellipse id="heroShadow" cx="2" cy="1" rx="18" ry="3.4" fill="#000" opacity=".45"/>
+          <g id="legB" stroke="#1b1530" stroke-linejoin="round">
+            <path d="M-10,-44 L1,-44 L0,-14 L-9,-14 Z" fill="#1b2038" stroke-width="1.2"/>
+            <path d="M-10,-16 L1,-16 L2,-5 C6,-5 9,-3 9,0 L-10,0 Z" fill="#4a2d16" stroke-width="1.2"/>
+          </g>
+          <g id="upper">
+            <g id="tails" stroke="#1b1530" stroke-linejoin="round" stroke-width=".9">
+              <path d="M-13,-99 C-26,-100 -38,-96 -52,-88 L-48,-84 C-36,-90 -26,-94 -13,-95.5 Z" fill="#b02a34"/>
+              <path d="M-13,-97.5 C-24,-94 -32,-86 -40,-76 L-35,-74 C-28,-84 -22,-90 -12,-94.5 Z" fill="#d8393f"/>
+            </g>
+            <g id="armB" stroke="#1b1530" stroke-linejoin="round">
+              <path d="M-11,-75 L-2,-74 L-3,-57 L-10,-58 Z" fill="#1f4189" stroke-width="1.2"/>
+              <circle cx="-6.5" cy="-55" r="3.2" fill="#f0b99a" stroke-width="1"/>
+            </g>
+            <g id="legF" stroke="#1b1530" stroke-linejoin="round">
+              <path d="M-2,-44 L10,-44 L9,-14 L-1,-14 Z" fill="#2a3150" stroke-width="1.2"/>
+              <path d="M7,-42 L6.4,-16" stroke="#3c4670" stroke-width="1.2" fill="none"/>
+              <path d="M-2,-16 L9,-16 L10,-5 C14,-5 17,-3 17,0 L-2,0 Z" fill="#6b4424" stroke-width="1.2"/>
+              <path d="M-2.4,-16.5 L9.6,-16.5 L9.6,-13 L-2.4,-13 Z" fill="#8a5a32" stroke-width=".9"/>
+            </g>
+            <g id="torso" stroke="#1b1530" stroke-linejoin="round">
+              <rect x="-2" y="-81" width="6" height="6" fill="#f0b99a" stroke-width="1"/>
+              <path d="M-11,-75 C-13,-64 -14,-54 -15,-44 L-19,-30 C-12,-33 -6,-34 0,-34 C6,-34 11,-33 15,-31 L12,-44 C12,-56 11,-66 10,-75 C4,-78 -5,-78 -11,-75 Z" fill="url(#coatG)" stroke-width="1.3"/>
+              <path d="M-11,-75 C-13,-64 -14,-54 -15,-44 L-19,-30 C-15,-32 -11,-33 -8,-33 C-8,-48 -7,-62 -5,-77 C-7,-76.8 -9,-76 -11,-75 Z" fill="#1f4189" stroke="none"/>
+              <path d="M-1,-77 L6,-77 L2.4,-66 Z" fill="#f4f0e8" stroke-width=".8"/>
+              <path d="M2.4,-66 L1.4,-34" stroke="#1f4189" stroke-width="1" fill="none"/>
+              <path d="M8.4,-72 C9.4,-62 10.2,-53 10.3,-47" stroke="#7aa4ee" stroke-width="1.4" fill="none" opacity=".85"/>
+              <path d="M-15,-48 L12,-47 L12,-43 L-15,-44 Z" fill="#f2c14e" stroke-width=".9"/>
+              <rect x="-0.5" y="-48.8" width="4.4" height="5.6" rx=".8" fill="#fff2b0" stroke-width=".8"/>
+            </g>
+            <g id="head"><use href="#headArt"/></g>
+            <g id="armF" stroke="#1b1530" stroke-linejoin="round">
+              <path d="M0,-76 L10,-74 L9,-58 L1,-58 Z" fill="#3a72cc" stroke-width="1.2"/>
+              <path d="M7.8,-72 L7.4,-60" stroke="#7aa4ee" stroke-width="1.2" fill="none" opacity=".8"/>
+              <path d="M0.6,-59.4 L9.4,-59.4 L9.2,-56 L0.9,-56 Z" fill="#f4f0e8" stroke-width=".8"/>
+              <g id="sword">
+                <rect x="3.6" y="-61" width="2.8" height="10" rx=".8" fill="#5a3a1e" stroke-width=".8"/>
+                <circle cx="5" cy="-61.5" r="1.9" fill="#f2c14e" stroke-width=".8"/>
+                <path d="M-1.4,-50.6 L11.4,-50.6 L10.2,-47.6 L-0.2,-47.6 Z" fill="#f2c14e" stroke-width=".9"/>
+                <path d="M3,-47.6 L7,-47.6 L6.6,-4 L5,1.5 L3.4,-4 Z" fill="url(#bladeG)" stroke-width=".8"/>
+                <path d="M5,-46 L5,-5" stroke="#ffffff" stroke-width=".7" opacity=".9" fill="none"/>
+              </g>
+              <circle cx="5" cy="-54.5" r="3.6" fill="#ffdcc0" stroke-width="1"/>
+            </g>
+          </g>
+        </g>
+      </svg>
+      <canvas id="glow"></canvas>
+      <canvas id="fg"></canvas>
+    </div>
+    <div class="vig"></div>
+    <div class="shield" id="shield">守 <span id="shv">3</span></div>
+    <div class="cut" id="cut">
+      <svg viewBox="-22 -123 46 50"><use href="#headArt"/></svg>
+      <span>条文一閃</span>
+    </div>
+    <div class="word" id="word">崩し！</div>
+    <div class="flash" id="flash"></div>
+    <div class="fps" id="fps"></div>
+    <div class="quiz"><p>問　権利能力は、出生によって始まる。</p><div class="ox"><span>○</span><span>×</span></div></div>
+  </div>
+  <div class="btns">
+    <button class="go" id="b1">斬る</button>
+    <button class="sp" id="b2">必殺技</button>
+    <button class="sub" id="b3">問題を重ねる</button>
+    <button class="sub" id="b4">光とぼかしを外す</button>
+  </div>
+  <p class="note">
+    <b>見どころ</b>：キャラは線と色で描いたイラスト（アニメ塗り）。拡大してもぼやけない。剣を振ると、刃の通り道に光の帯が残る。<br>
+    舞台は奥の壁と手前の柱をぼかして奥行きを出し、窓から差す光の筋・たいまつ・光の粒を重ねている。<br>
+    「斬る」を3回当てると敵の「守」が0になって「崩し！」。「必殺技」はキャラの顔が出るカットインのあと、3連続で斬る。右上の数字は fps（60 に近いほどなめらか）。<br>
+    試作なので本番とは別のページ。キャラ・技名・敵は仮のもの。
+  </p>
+</div>
+
+<script>
+const LW = 192, LH = 136, GROUND = 112, HSC = .52, FSC = .6;
+const $ = id => document.getElementById(id);
+const stage = $('stage'), world = $('world');
+const cvs = { bg: $('bg'), floor: $('floor'), glow: $('glow'), fg: $('fg') };
+const bg = cvs.bg.getContext('2d'), fl = cvs.floor.getContext('2d'), gl = cvs.glow.getContext('2d'), fgc = cvs.fg.getContext('2d');
+let K = 1;
+
+let seed = 7;
+const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+
+/* ---------- 舞台（大きさが変わったら描き直す） ---------- */
+function sizeAll() {
+  const r = stage.getBoundingClientRect(), d = Math.min(devicePixelRatio || 1, 2);
+  for (const c of Object.values(cvs)) { c.width = Math.round(r.width * d); c.height = Math.round(r.height * d); }
+  K = cvs.bg.width / LW;
+  for (const x of [bg, fl, gl, fgc]) x.setTransform(K, 0, 0, K, 0, 0);
+  seed = 7; drawBg(); drawFloor(); drawFg();
+}
+function drawBg() {
+  const g = bg.createLinearGradient(0, 0, 0, 90);
+  g.addColorStop(0, '#120f24'); g.addColorStop(1, '#2b2548');
+  bg.fillStyle = g; bg.fillRect(0, 0, LW, 90);
+  for (let y = 0; y < 90; y += 6) {
+    const off = (y / 6) % 2 ? 8 : 0;
+    for (let x = -off; x < LW; x += 16) {
+      const v = 30 + Math.floor(rnd() * 14), lift = Math.max(0, 1 - Math.abs(x + 8 - 96) / 70) * 14 * (y / 90);
+      bg.fillStyle = `rgb(${v + lift},${v - 4 + lift},${v + 20 + lift})`; bg.fillRect(x + .6, y + .6, 14.8, 4.8);
+      bg.fillStyle = 'rgba(255,255,255,.05)'; bg.fillRect(x + .6, y + .6, 14.8, .6);
+    }
+  }
+  // 窓
+  bg.fillStyle = '#0b0918'; bg.beginPath(); bg.moveTo(72, 64); bg.lineTo(72, 22); bg.arc(96, 22, 24, Math.PI, 0); bg.lineTo(120, 64); bg.fill();
+  const wg = bg.createLinearGradient(0, 0, 0, 62);
+  wg.addColorStop(0, '#1c2a66'); wg.addColorStop(1, '#5c74c8');
+  bg.fillStyle = wg; bg.beginPath(); bg.moveTo(76, 61); bg.lineTo(76, 22); bg.arc(96, 22, 20, Math.PI, 0); bg.lineTo(116, 61); bg.fill();
+  for (let i = 0; i < 14; i++) { bg.fillStyle = `rgba(255,255,255,${.4 + rnd() * .5})`; bg.beginPath(); bg.arc(78 + rnd() * 36, 6 + rnd() * 40, .25 + rnd() * .35, 0, 7); bg.fill(); }
+  const mg = bg.createRadialGradient(104, 22, 0, 104, 22, 16); mg.addColorStop(0, 'rgba(255,250,220,.7)'); mg.addColorStop(1, 'rgba(255,250,220,0)');
+  bg.fillStyle = mg; bg.fillRect(86, 4, 36, 36);
+  bg.fillStyle = '#fffbe8'; bg.beginPath(); bg.arc(104, 22, 6, 0, 7); bg.fill();
+  bg.fillStyle = '#0b0918'; bg.fillRect(95.2, 0, 1.6, 62); bg.fillRect(76, 36, 40, 1.6);
+  // 旗（はかりの印）
+  for (const x of [56, 136]) {
+    const fg = bg.createLinearGradient(x - 8, 0, x + 8, 0); fg.addColorStop(0, '#5a1420'); fg.addColorStop(.5, '#8a2230'); fg.addColorStop(1, '#4a101a');
+    bg.fillStyle = fg; bg.beginPath(); bg.moveTo(x - 8, 8); bg.lineTo(x + 8, 8); bg.lineTo(x + 8, 52); bg.lineTo(x, 46); bg.lineTo(x - 8, 52); bg.fill();
+    bg.strokeStyle = '#d9a640'; bg.lineWidth = .8; bg.beginPath();
+    bg.moveTo(x, 18); bg.lineTo(x, 34); bg.moveTo(x - 6, 22); bg.lineTo(x + 6, 22); bg.moveTo(x - 4, 34); bg.lineTo(x + 4, 34); bg.stroke();
+    for (const s of [-1, 1]) { bg.beginPath(); bg.moveTo(x + s * 6, 22); bg.lineTo(x + s * 6 - 2.4, 28); bg.lineTo(x + s * 6 + 2.4, 28); bg.closePath(); bg.stroke(); }
+    bg.fillStyle = '#d9a640'; bg.fillRect(x - 9, 7, 18, 1.6);
+  }
+  // 奥の柱
+  for (const x of [34, 148]) {
+    const pg = bg.createLinearGradient(x, 0, x + 11, 0); pg.addColorStop(0, '#2a2442'); pg.addColorStop(.35, '#57507e'); pg.addColorStop(1, '#1e1a32');
+    bg.fillStyle = pg; bg.fillRect(x, 0, 11, 90);
+  }
+  bg.fillStyle = '#100d1e'; bg.fillRect(0, 84, LW, 6);
+}
+function drawFloor() {
+  fl.clearRect(0, 0, LW, LH);
+  const rows = [88, 90, 93, 97, 102, 108, 115, 124, 136], VY = 28;
+  for (let r = 0; r < rows.length - 1; r++) for (let i = -10; i < 10; i++) {
+    const y0 = rows[r], y1 = rows[r + 1];
+    const x = (i, y) => 96 + i * 22 * (y - VY) / (136 - VY);
+    const v = ((i + r) % 2 ? 52 : 44) + Math.floor(rnd() * 6);
+    const tg = fl.createLinearGradient(0, y0, 0, y1); tg.addColorStop(0, `rgb(${v + 8},${v + 2},${v + 30})`); tg.addColorStop(1, `rgb(${v},${v - 6},${v + 20})`);
+    fl.fillStyle = tg; fl.beginPath(); fl.moveTo(x(i, y0), y0); fl.lineTo(x(i + 1, y0), y0); fl.lineTo(x(i + 1, y1), y1); fl.lineTo(x(i, y1), y1); fl.closePath(); fl.fill();
+    fl.strokeStyle = 'rgba(10,8,20,.55)'; fl.lineWidth = .35; fl.stroke();
+  }
+  fl.fillStyle = '#1b1730'; fl.fillRect(0, 86.5, LW, 1.6);
+  for (const x of [8, 166]) {
+    const pg = fl.createLinearGradient(x, 0, x + 18, 0); pg.addColorStop(0, '#2c2646'); pg.addColorStop(.3, '#77709e'); pg.addColorStop(.55, '#4c4570'); pg.addColorStop(1, '#221d38');
+    fl.fillStyle = pg; fl.fillRect(x, 0, 18, 98);
+    fl.fillStyle = '#3a3460'; fl.fillRect(x - 3, 92, 24, 8); fl.fillRect(x - 2, 10, 22, 5);
+    fl.fillStyle = 'rgba(255,255,255,.12)'; fl.fillRect(x - 3, 92, 24, .8);
+    fl.fillStyle = '#4a2f18'; fl.beginPath(); fl.moveTo(x + 6, 66); fl.lineTo(x + 12, 66); fl.lineTo(x + 13, 59); fl.lineTo(x + 5, 59); fl.fill();
+    fl.fillStyle = '#7a5530'; fl.fillRect(x + 4.5, 58, 9, 1.6);
+  }
+}
+function drawFg() {
+  fgc.clearRect(0, 0, LW, LH);
+  fgc.fillStyle = '#06040c';
+  fgc.fillRect(0, 0, 7, LH); fgc.fillRect(186, 0, 6, LH);
+  fgc.beginPath(); fgc.moveTo(0, LH); fgc.lineTo(0, 122); fgc.quadraticCurveTo(22, 124, 36, 136); fgc.fill();
+  fgc.beginPath(); fgc.moveTo(LW, LH); fgc.lineTo(LW, 118); fgc.quadraticCurveTo(170, 126, 158, 136); fgc.fill();
+  fgc.strokeStyle = '#0a0812'; fgc.lineWidth = 1.4;
+  for (const [x, l] of [[28, 16], [34, 9], [152, 13], [160, 21]]) { fgc.beginPath(); fgc.moveTo(x, 0); fgc.quadraticCurveTo(x + 3, l / 2, x, l); fgc.stroke(); }
+}
+addEventListener('resize', sizeAll); sizeAll();
+
+/* ---------- 光の粒・火花 ---------- */
+const dust = Array.from({ length: 50 }, () => ({ x: 56 + rnd() * 96, y: rnd() * 136, s: .4 + rnd() * .9, v: .03 + rnd() * .08, p: rnd() * 6 }));
+const sparks = [];
+function burst(x, y, n, col, sp = 2.2) {
+  for (let i = 0; i < n; i++) {
+    const a = Math.random() * Math.PI * 2, v = (.4 + Math.random()) * sp;
+    sparks.push({ x, y, vx: Math.cos(a) * v, vy: Math.sin(a) * v - .6, life: 1, col, r: .6 + Math.random() * 1.2 });
+  }
+}
+
+/* ---------- 状態 ---------- */
+const S = { hx: 50, hy: 0, arm: -.5, blade: -2.4, lean: 0, stride: 0, aura: 0, fx: 146, knock: 0, flash: 0, broken: 0, shield: 3, slashes: [], light: 0 };
+let act = null;
+const trail = [];
+let lastBlade = S.blade;
+
+/* ---------- 音 ---------- */
+let AC;
+function ac() { if (!AC) AC = new (window.AudioContext || window.webkitAudioContext)(); return AC; }
+function noise(dur, vol, f) { const a = ac(), b = a.createBuffer(1, a.sampleRate * dur, a.sampleRate), d = b.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+  const s = a.createBufferSource(), f2 = a.createBiquadFilter(), g = a.createGain(); f2.type = 'bandpass'; f2.frequency.value = f; g.gain.value = vol;
+  s.buffer = b; s.connect(f2).connect(g).connect(a.destination); s.start(); }
+function sweep(f1, f2, dur, vol, type = 'sawtooth') { const a = ac(), o = a.createOscillator(), g = a.createGain(), t = a.currentTime;
+  o.type = type; o.frequency.setValueAtTime(f1, t); o.frequency.exponentialRampToValueAtTime(f2, t + dur);
+  g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(.001, t + dur); o.connect(g).connect(a.destination); o.start(t); o.stop(t + dur); }
+const SE = { swing: () => noise(.18, .5, 3000), hit: () => { noise(.25, .9, 500); sweep(180, 50, .25, .4, 'square'); },
+  charge: () => sweep(200, 1400, .9, .12), boom: () => { noise(.8, 1.2, 300); sweep(120, 30, .8, .6, 'square'); }, brk: () => { sweep(900, 1800, .15, .2, 'square'); setTimeout(() => sweep(1200, 2400, .25, .2, 'square'), 120); } };
+
+/* ---------- 便利 ---------- */
+const lerp = (a, b, t) => a + (b - a) * t;
+const ease = t => t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+function seg(t, keys) {
+  if (t <= keys[0][0]) return keys[0][1];
+  for (let i = 1; i < keys.length; i++) if (t <= keys[i][0]) {
+    const [t0, v0] = keys[i - 1], [t1, v1] = keys[i]; return lerp(v0, v1, ease((t - t0) / (t1 - t0)));
+  }
+  return keys[keys.length - 1][1];
+}
+const DEG = 180 / Math.PI;
+const rotAbout = (d, cx, cy) => new DOMMatrix().translate(cx, cy).rotate(d).translate(-cx, -cy);
+function toScreen(x, y) { return { left: (x / LW * 100) + '%', top: (y / LH * 100) + '%' }; }
+function num(text, x, y, big) {
+  const n = document.createElement('div'); n.className = 'num' + (big ? ' big' : ''); n.textContent = text;
+  Object.assign(n.style, toScreen(x, y)); stage.appendChild(n);
+  n.animate([{ transform: 'translate(-50%,-50%) scale(1.8)', opacity: 0 }, { transform: 'translate(-50%,-50%) scale(1)', opacity: 1, offset: .15 },
+    { transform: 'translate(-50%,-120%) scale(1)', opacity: 1, offset: .7 }, { transform: 'translate(-50%,-160%)', opacity: 0 }], { duration: 900, easing: 'ease-out' }).onfinish = () => n.remove();
+}
+function shake(px, ms) { world.animate([...Array(8)].map((_, i) => ({ transform: `translate(${(i % 2 ? -1 : 1) * px * (1 - i / 8)}px,${(i % 3 - 1) * px * .6}px)` })).concat([{ transform: 'none' }]), { duration: ms, composite: 'add' }); }
+function flashOn(op, ms) { $('flash').animate([{ opacity: op }, { opacity: 0 }], { duration: ms, easing: 'ease-out' }); }
+function setShield(v) {
+  S.shield = Math.max(0, v); $('shv').textContent = S.shield;
+  const sh = $('shield'); sh.classList.add('hit'); setTimeout(() => sh.classList.remove('hit'), 160);
+  sh.classList.toggle('broke', S.shield === 0);
+}
+function breakFoe() {
+  S.broken = 1; SE.brk();
+  $('word').animate([{ opacity: 0, transform: 'translate(-50%,-50%) scale(2.6) rotate(-6deg)' }, { opacity: 1, transform: 'translate(-50%,-50%) scale(1) rotate(-6deg)', offset: .15 },
+    { opacity: 1, transform: 'translate(-50%,-50%) scale(1.05) rotate(-6deg)', offset: .75 }, { opacity: 0, transform: 'translate(-50%,-50%) scale(1.1) rotate(-6deg)' }], { duration: 1400 });
+  burst(S.fx, 80, 40, '#ffd27a', 3);
+  setTimeout(() => { S.broken = 0; setShield(3); }, 2600);
+}
+function hitFoe(dmg, big) {
+  S.flash = 1; S.knock = big ? 12 : 6; SE.hit();
+  burst(S.fx - 8, 80, big ? 30 : 16, '#ffe9b0', big ? 3.2 : 2.4);
+  num(dmg, S.fx + (Math.random() * 16 - 8), 62 + Math.random() * 6, big);
+  shake(big ? 7 : 4, big ? 380 : 220);
+  if (S.shield > 0) { setShield(S.shield - 1); if (S.shield === 0) setTimeout(breakFoe, 120); }
+}
+
+/* ---------- 攻撃 ---------- */
+function attack() {
+  if (act) return;
+  ac();
+  let hitDone = false, sw = false;
+  act = { t0: performance.now(), dur: 950, step(t) {
+    S.hx = seg(t, [[0, 50], [160, 44], [300, 112], [720, 112], [950, 50]]);
+    S.hy = seg(t, [[0, 0], [300, 0], [720, 0], [820, -10], [950, 0]]);
+    S.arm = seg(t, [[0, -.5], [160, 2.6], [300, 2.6], [420, -1.3], [720, -1.2], [950, -.5]]);
+    S.blade = seg(t, [[0, -2.4], [160, 2.6], [300, 2.6], [420, -1.3], [720, -1.2], [950, -2.4]]);
+    S.lean = seg(t, [[0, 0], [160, -.12], [300, .1], [420, .32], [720, .28], [950, 0]]);
+    S.stride = seg(t, [[0, 0], [160, .15], [300, .6], [720, .55], [820, .2], [950, 0]]);
+    if (!sw && t > 300) { sw = true; SE.swing(); S.slashes.push({ x: 142, y: 76, r: 26, a0: -2.2, a1: 1.1, life: 1 }); }
+    if (!hitDone && t > 380) { hitDone = true; hitFoe(String(120 + Math.floor(Math.random() * 60)), false); }
+  } };
+}
+function special() {
+  if (act) return;
+  ac();
+  const T = 2500, done = {};
+  const once = (k, t, at, f) => { if (!done[k] && t > at) { done[k] = 1; f(); } };
+  $('dark').animate([{ opacity: 0 }, { opacity: .75, offset: .12 }, { opacity: .75, offset: .8 }, { opacity: 0 }], { duration: T });
+  world.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.25)', offset: .2 }, { transform: 'scale(1.25)', offset: .42 }, { transform: 'scale(1.1) translateX(-7%)', offset: .62 }, { transform: 'scale(1.1) translateX(-7%)', offset: .85 }, { transform: 'scale(1)' }], { duration: T, easing: 'ease-in-out' });
+  $('cut').animate([{ opacity: 0, transform: 'translateX(-40%) skewY(-4deg)' }, { opacity: 1, transform: 'translateX(0) skewY(-4deg)', offset: .1 }, { opacity: 1, transform: 'translateX(3%) skewY(-4deg)', offset: .32 }, { opacity: 0, transform: 'translateX(40%) skewY(-4deg)', offset: .42 }, { opacity: 0 }], { duration: T });
+  SE.charge();
+  act = { t0: performance.now(), dur: T, step(t) {
+    S.aura = seg(t, [[0, 0], [300, 1], [1000, 1], [1200, .3], [2200, .3], [2500, 0]]);
+    S.hx = seg(t, [[0, 50], [1000, 50], [1150, 114], [1950, 114], [2200, 50]]);
+    S.hy = seg(t, [[0, 0], [1150, 0], [1300, -14], [1450, 0], [1950, 0], [2100, -12], [2200, 0]]);
+    S.arm = seg(t, [[0, -.5], [400, 2.8], [1000, 2.8], [1200, -1.4], [1300, 2.2], [1420, -1.6], [1560, 2.9], [1700, -1.4], [1950, -1.3], [2200, -.5]]);
+    S.blade = seg(t, [[0, -2.4], [400, 2.8], [1000, 2.8], [1200, -1.4], [1300, 2.2], [1420, -1.6], [1560, 2.9], [1700, -1.4], [1950, -1.3], [2200, -2.4]]);
+    S.lean = seg(t, [[0, 0], [400, -.15], [1000, -.15], [1200, .3], [1300, -.05], [1420, .32], [1560, -.1], [1700, .38], [1950, .3], [2200, 0]]);
+    S.stride = seg(t, [[0, 0], [400, .25], [1000, .25], [1150, .65], [1950, .55], [2200, 0]]);
+    S.light = seg(t, [[0, 0], [1640, 0], [1700, 1], [2100, .2], [2400, 0]]);
+    once('s1', t, 1150, () => { SE.swing(); S.slashes.push({ x: 144, y: 76, r: 28, a0: -2.2, a1: 1.1, life: 1 }); });
+    once('h1', t, 1200, () => hitFoe('248', false));
+    once('s2', t, 1380, () => { SE.swing(); S.slashes.push({ x: 144, y: 74, r: 30, a0: 2.4, a1: -.8, life: 1, rev: 1 }); });
+    once('h2', t, 1420, () => hitFoe('263', false));
+    once('s3', t, 1650, () => { SE.swing(); S.slashes.push({ x: 146, y: 76, r: 38, a0: -2.4, a1: 1.3, life: 1 }); });
+    once('h3', t, 1700, () => { SE.boom(); flashOn(.9, 500); if (S.shield > 1) setShield(1); hitFoe('9999', true); });
+  } };
+}
+$('b1').onclick = attack;
+$('b2').onclick = special;
+$('b3').onclick = e => { const on = stage.classList.toggle('withq'); e.target.textContent = on ? '問題を外す' : '問題を重ねる'; };
+$('b4').onclick = e => { const on = stage.classList.toggle('flat'); e.target.textContent = on ? '光とぼかしを戻す' : '光とぼかしを外す'; };
+
+/* ---------- キャラを動かす ---------- */
+const E = { hero: $('hero'), upper: $('upper'), armF: $('armF'), armB: $('armB'), sword: $('sword'), legF: $('legF'), legB: $('legB'),
+  head: $('head'), tails: $('tails'), heroShadow: $('heroShadow'), foe: $('foe'), foeBody: $('foeBody'), foeWhite: $('foeWhite'),
+  clawF: $('clawF'), clawB: $('clawB'), foeShadow: $('foeShadow') };
+let blade = { tip: { x: 0, y: 0 }, base: { x: 0, y: 0 } };
+function poseHero(t) {
+  const idle = act ? 0 : 1;
+  const breath = Math.sin(t / 420) * .8 * idle;
+  E.hero.setAttribute('transform', `translate(${S.hx},${GROUND + S.hy}) scale(${HSC})`);
+  E.heroShadow.setAttribute('rx', 18 - Math.min(8, -S.hy / 2));
+  E.heroShadow.setAttribute('transform', `translate(0,${-S.hy / HSC})`);
+  const lean = S.lean * DEG, arm = S.arm * DEG + breath * 2, rel = (S.blade - S.arm) * DEG;
+  E.upper.setAttribute('transform', `translate(0,${breath * .6}) rotate(${lean} 0 -44)`);
+  E.armF.setAttribute('transform', `rotate(${arm} 5 -72)`);
+  E.sword.setAttribute('transform', `rotate(${rel} 5 -54.5)`);
+  E.armB.setAttribute('transform', `rotate(${-S.arm * 12 + Math.sin(t / 420) * 4 * idle - lean * .5} -6 -72)`);
+  E.legF.setAttribute('transform', `rotate(${-S.stride * DEG * .6} 4 -42)`);
+  E.legB.setAttribute('transform', `rotate(${S.stride * DEG * .5} -4 -42)`);
+  E.head.setAttribute('transform', `translate(0,${breath * .4}) rotate(${-S.lean * 12 + Math.sin(t / 900) * 2} 1 -78)`);
+  E.tails.setAttribute('transform', `rotate(${Math.sin(t / 240) * 7 + S.stride * 20 - lean * .6} -12 -99)`);
+  // 刃の位置（光の帯のため）
+  const M = new DOMMatrix().translate(S.hx, GROUND + S.hy + breath * .6 * HSC).scale(HSC)
+    .multiply(rotAbout(lean, 0, -44)).multiply(rotAbout(arm, 5, -72)).multiply(rotAbout(rel, 5, -54.5));
+  blade = { tip: M.transformPoint({ x: 5, y: 1.5 }), base: M.transformPoint({ x: 5, y: -44 }) };
+  const moved = Math.abs(S.blade - lastBlade); lastBlade = S.blade;
+  if (act && moved > .06) trail.push({ tip: blade.tip, base: blade.base, life: 1 });
+}
+function poseFoe(t) {
+  S.knock *= .86;
+  const fy = Math.sin(t / 420) * 2 - 4;
+  const tilt = S.broken ? Math.sin(t / 60) * 3 + 9 : 0;
+  E.foe.setAttribute('transform', `translate(${S.fx + S.knock},${GROUND}) scale(${FSC})`);
+  E.foeBody.setAttribute('transform', `translate(0,${fy / FSC}) rotate(${tilt} 0 0)`);
+  E.foeWhite.setAttribute('transform', `translate(0,${fy / FSC}) rotate(${tilt} 0 0)`);
+  E.foeWhite.setAttribute('opacity', S.flash > .05 ? S.flash : 0); S.flash *= .82;
+  E.clawF.setAttribute('transform', `rotate(${Math.sin(t / 380) * 6} 28 -60)`);
+  E.clawB.setAttribute('transform', `rotate(${-Math.sin(t / 380 + 1) * 6} -28 -60)`);
+}
+
+/* ---------- 光 ---------- */
+function rg(x, y, r, col, a) {
+  const g = gl.createRadialGradient(x, y, 0, x, y, r);
+  g.addColorStop(0, col.replace('A', a)); g.addColorStop(1, col.replace('A', 0));
+  gl.fillStyle = g; gl.fillRect(x - r, y - r, r * 2, r * 2);
+}
+function drawGlow(t) {
+  gl.clearRect(0, 0, LW, LH);
+  gl.globalCompositeOperation = 'lighter';
+  const sh = .75 + Math.sin(t / 1300) * .15;
+  const lg = gl.createLinearGradient(0, 14, 0, 136);
+  lg.addColorStop(0, `rgba(170,195,255,${.2 * sh})`); lg.addColorStop(1, 'rgba(170,195,255,0.02)');
+  gl.fillStyle = lg;
+  for (const [a, b, c, d] of [[78, 92, 118, 70], [97, 113, 152, 120]]) {
+    gl.beginPath(); gl.moveTo(a, 14); gl.lineTo(b, 14); gl.lineTo(d, 136); gl.lineTo(c, 136); gl.closePath(); gl.fill();
+  }
+  rg(112, 120, 36, 'rgba(160,185,255,A)', .15 * sh);
+  rg(100, 26, 30, 'rgba(200,215,255,A)', .22);
+  // たいまつ（炎）
+  for (const x of [17, 175]) {
+    const f = .8 + Math.sin(t / 70 + x) * .1 + Math.sin(t / 37 + x * 2) * .08;
+    rg(x, 54, 44, 'rgba(255,140,50,A)', .3 * f);
+    for (let i = 0; i < 3; i++) {
+      const h = (7 + i * -2) * f, w = 3.2 - i * .8, sway = Math.sin(t / 90 + i + x) * .8;
+      gl.fillStyle = ['rgba(255,110,30,.75)', 'rgba(255,190,70,.85)', 'rgba(255,245,200,.95)'][i];
+      gl.beginPath(); gl.moveTo(x - w, 58); gl.quadraticCurveTo(x - w, 58 - h * .6, x + sway, 58 - h); gl.quadraticCurveTo(x + w, 58 - h * .6, x + w, 58); gl.closePath(); gl.fill();
+    }
+  }
+  for (const p of dust) {
+    p.y -= p.v; p.x += Math.sin(t / 900 + p.p) * .04; if (p.y < -2) { p.y = 138; p.x = 56 + Math.random() * 96; }
+    const tw = .5 + .5 * Math.sin(t / 400 + p.p * 3);
+    gl.fillStyle = `rgba(220,230,255,${.55 * tw})`; gl.beginPath(); gl.arc(p.x, p.y, p.s * .5, 0, 7); gl.fill();
+  }
+  // 敵の目の光
+  const ex = S.fx + S.knock, ey = GROUND + (Math.sin(t / 420) * 2 - 4) - 68 * FSC;
+  for (const s of [-1, 1]) rg(ex + s * 7, ey, 7, 'rgba(255,70,120,A)', .55);
+  // 刃のきらめき
+  if (!act) { const g = (Math.sin(t / 700) + 1) / 2; rg(blade.tip.x, blade.tip.y, 4, 'rgba(200,235,255,A)', .5 * g * g); }
+  else rg((blade.tip.x + blade.base.x) / 2, (blade.tip.y + blade.base.y) / 2, 12, 'rgba(120,190,255,A)', .25);
+  // 必殺技のオーラ
+  if (S.aura > .01) {
+    rg(S.hx, GROUND - 28, 34, 'rgba(90,160,255,A)', .5 * S.aura);
+    rg(S.hx, GROUND - 28, 14, 'rgba(220,240,255,A)', .5 * S.aura);
+    if (Math.random() < S.aura) sparks.push({ x: S.hx + (Math.random() * 26 - 13), y: GROUND, vx: 0, vy: -1.2 - Math.random(), life: 1, col: '#9fd0ff', r: .8 });
+  }
+  // 刃の通り道の光の帯
+  for (let i = 1; i < trail.length; i++) {
+    const a = trail[i - 1], b = trail[i], al = Math.min(a.life, b.life);
+    gl.fillStyle = `rgba(150,210,255,${.55 * al})`;
+    gl.beginPath(); gl.moveTo(a.base.x, a.base.y); gl.lineTo(a.tip.x, a.tip.y); gl.lineTo(b.tip.x, b.tip.y); gl.lineTo(b.base.x, b.base.y); gl.closePath(); gl.fill();
+    gl.strokeStyle = `rgba(255,255,255,${.9 * al})`; gl.lineWidth = 1.2 * al;
+    gl.beginPath(); gl.moveTo(a.tip.x, a.tip.y); gl.lineTo(b.tip.x, b.tip.y); gl.stroke();
+  }
+  for (const p of trail) p.life -= .11;
+  while (trail.length && trail[0].life <= 0) trail.shift();
+  // 斬撃
+  for (const s of S.slashes) {
+    gl.lineCap = 'round';
+    for (const [w, c] of [[7, `rgba(120,190,255,${.5 * s.life})`], [3, `rgba(255,255,255,${s.life})`]]) {
+      gl.strokeStyle = c; gl.lineWidth = w * s.life; gl.beginPath(); gl.arc(s.x, s.y, s.r, s.a0, s.a1, !!s.rev); gl.stroke();
+    }
+    s.life -= .06;
+  }
+  S.slashes = S.slashes.filter(s => s.life > 0);
+  for (const p of sparks) {
+    p.x += p.vx; p.y += p.vy; p.vy += .06; p.life -= .03;
+    gl.fillStyle = p.col; gl.globalAlpha = Math.max(0, p.life);
+    gl.beginPath(); gl.arc(p.x, p.y, p.r * .6, 0, 7); gl.fill();
+  }
+  gl.globalAlpha = 1;
+  for (let i = sparks.length - 1; i >= 0; i--) if (sparks[i].life <= 0) sparks.splice(i, 1);
+  // 崩れた敵の星
+  if (S.broken) for (let i = 0; i < 3; i++) {
+    const a = t / 300 + i * 2.1, x = ex + Math.cos(a) * 14, y = GROUND - 82 + Math.sin(a) * 3;
+    gl.fillStyle = '#ffe27a'; gl.beginPath();
+    for (let k = 0; k < 8; k++) { const r = k % 2 ? .9 : 2.6, b = k * Math.PI / 4; gl.lineTo(x + Math.cos(b) * r, y + Math.sin(b) * r); }
+    gl.fill();
+  }
+  if (S.light > .01) {
+    const pg = gl.createLinearGradient(S.fx - 16, 0, S.fx + 16, 0);
+    pg.addColorStop(0, 'rgba(120,180,255,0)'); pg.addColorStop(.5, `rgba(235,245,255,${S.light})`); pg.addColorStop(1, 'rgba(120,180,255,0)');
+    gl.fillStyle = pg; gl.fillRect(S.fx - 16, 0, 32, GROUND);
+    rg(S.fx, 84, 54, 'rgba(160,210,255,A)', .6 * S.light);
+  }
+  const fog = gl.createLinearGradient(0, 98, 0, 136);
+  fog.addColorStop(0, 'rgba(140,150,220,0)'); fog.addColorStop(1, 'rgba(140,150,220,.10)');
+  gl.fillStyle = fog; gl.fillRect(0, 98, LW, 38);
+  gl.globalCompositeOperation = 'source-over';
+}
+
+let frames = 0, fpsT = performance.now();
+function loop(t) {
+  if (act) { const e = t - act.t0; act.step(Math.min(e, act.dur)); if (e >= act.dur) act = null; }
+  poseFoe(t);
+  poseHero(t);
+  drawGlow(t);
+  $('shield').style.left = toScreen(S.fx, 0).left;
+  frames++; if (t - fpsT > 500) { $('fps').textContent = Math.round(frames * 1000 / (t - fpsT)) + ' fps'; frames = 0; fpsT = t; }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
