@@ -1,0 +1,325 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>背景バトルの試作</title>
+<style>
+:root { --panel: rgba(255,255,255,.92); --text: #24221f; --muted: #6b665e; --accent: #2f5d8a; --ok: #2e7d4f; --ng: #c0392b; }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #6f8f5a; color: var(--text);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; -webkit-tap-highlight-color: transparent; }
+canvas#field { position: fixed; inset: 0; width: 100%; height: 100%; display: block; }
+.ui { position: fixed; inset: 0; display: flex; flex-direction: column; padding: 10px 12px calc(12px + env(safe-area-inset-bottom)); pointer-events: none; }
+.ui > * { pointer-events: auto; }
+.hud { display: flex; align-items: center; gap: 8px; background: var(--panel); border-radius: 12px; padding: 6px 10px; font-size: 13px; }
+.hud .lv { font-weight: 800; color: var(--accent); white-space: nowrap; }
+.hud .bar { flex: 1; height: 8px; background: #ddd6c8; border-radius: 4px; overflow: hidden; }
+.hud .bar i { display: block; height: 100%; width: 0; background: #e0a43a; transition: width .4s; }
+.hud .kills { font-weight: 800; white-space: nowrap; }
+.hud .fps { color: var(--muted); font-size: 11px; white-space: nowrap; min-width: 44px; text-align: right; }
+.hud button { border: 0; background: none; font-size: 18px; padding: 0 2px; cursor: pointer; }
+.q { margin-top: 8px; background: var(--panel); border-radius: 12px; padding: 10px 12px; }
+.q .stage { font-size: 12px; color: var(--muted); }
+.q .text { font-size: 18px; font-weight: 700; margin: 2px 0 6px; }
+.q ol { margin: 0; padding-left: 1.6em; font-size: 16px; }
+.q li { min-height: 1.5em; }
+.q li.hid { color: #b0a898; }
+.q li.got { color: var(--ok); font-weight: 700; }
+.spacer { flex: 1; }
+.ans { background: var(--panel); border-radius: 12px; padding: 10px; }
+.ans .msg { font-size: 13px; color: var(--muted); margin-bottom: 6px; min-height: 1.2em; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chips button { font: inherit; font-size: 16px; padding: 10px 12px; border-radius: 10px; border: 1.5px solid #cfc7b8; background: #fff; cursor: pointer; }
+.chips button:disabled { opacity: .35; }
+.chips button.ok { border-color: var(--ok); color: var(--ok); }
+.chips button.ng { border-color: var(--ng); color: var(--ng); }
+.next { margin-top: 8px; width: 100%; font: inherit; font-size: 17px; font-weight: 700; padding: 12px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; display: none; }
+.sheet { position: fixed; right: 12px; top: 56px; background: #fff; border-radius: 12px; padding: 12px; box-shadow: 0 6px 24px rgba(0,0,0,.25); font-size: 14px; display: none; width: 230px; }
+.sheet h4 { margin: 0 0 4px; font-size: 13px; color: var(--muted); }
+.sheet .seg { display: flex; gap: 4px; margin-bottom: 10px; }
+.sheet .seg button { flex: 1; font: inherit; padding: 6px 0; border: 1px solid #cfc7b8; background: #fff; border-radius: 8px; }
+.sheet .seg button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sheet p { margin: 0; font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<canvas id="field"></canvas>
+<div class="ui">
+  <div class="hud">
+    <span class="lv" id="lv">Lv1</span>
+    <span class="bar"><i id="xpbar"></i></span>
+    <span class="kills" id="kills">撃破 0</span>
+    <span class="fps" id="fps"></span>
+    <button id="gear" aria-label="設定">⚙</button>
+  </div>
+  <div class="q">
+    <div class="stage" id="stage"></div>
+    <div class="text" id="qtext"></div>
+    <ol id="items"></ol>
+  </div>
+  <div class="spacer"></div>
+  <div class="ans">
+    <div class="msg" id="msg">正しいものをタップ（試作なので選んで答える形）</div>
+    <div class="chips" id="chips"></div>
+    <button class="next" id="next">次の問題</button>
+  </div>
+</div>
+<div class="sheet" id="sheet">
+  <h4>背景の動き</h4>
+  <div class="seg" data-k="motion"><button data-v="2">強</button><button data-v="1">弱</button><button data-v="0">切</button></div>
+  <h4>敵の数（重さの確認用）</h4>
+  <div class="seg" data-k="cap"><button data-v="30">30</button><button data-v="60">60</button><button data-v="120">120</button></div>
+  <p>右上の数字は1秒あたりのコマ数（60に近いほどなめらか）。</p>
+</div>
+
+<script>
+// ===== 背景バトルの試作（暗記カードの議題ボード「経験値」の相談用。本番のアプリとは別） =====
+const Q = [
+  { q: '制限行為能力者の種類は？', items: ['未成年者', '成年被後見人', '被保佐人', '被補助人'], decoys: ['任意後見人', '保佐人', '成年後見人'], mul: 3.0, note: 'はじめて ×3.0' },
+  { q: '取り消すことができる行為の取消権者は？（120条1項）', items: ['制限行為能力者', '代理人', '承継人', '同意をすることができる者'], decoys: ['相手方', '債権者'], mul: 1.8, note: '7日ぶり ×1.8' },
+  { q: '取消権が消える期間は？（126条）', items: ['追認できる時から5年', '行為の時から20年'], decoys: ['追認できる時から10年', '行為の時から10年', '知った時から3年'], mul: 1.4, note: '3日ぶり ×1.4' },
+  { q: '表見代理の3つの型は？', items: ['代理権授与の表示', '権限外の行為', '代理権消滅後'], decoys: ['無権代理人の責任', '自己契約', '双方代理'], mul: 2.2, note: '正答率40% ×1.6 など', boss: true },
+];
+
+// ---------- 設定 ----------
+const opt = { motion: matchMedia('(prefers-reduced-motion: reduce)').matches ? 1 : 2, cap: 60 };
+try { Object.assign(opt, JSON.parse(localStorage.getItem('proto-battle') || '{}')); } catch (e) {}
+function saveOpt() { try { localStorage.setItem('proto-battle', JSON.stringify(opt)); } catch (e) {} }
+
+// ---------- 画面 ----------
+const cv = document.getElementById('field'), cx = cv.getContext('2d');
+let W = 0, H = 0, DPR = 1;
+function resize() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = innerWidth; H = innerHeight;
+  cv.width = W * DPR; cv.height = H * DPR;
+  cx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+addEventListener('resize', resize); resize();
+
+// 敵の絵（絵文字を一度だけ小さな板に描いて使い回す）
+function sprite(ch, size) {
+  const c = document.createElement('canvas'); c.width = c.height = size * 2;
+  const g = c.getContext('2d'); g.font = `${size * 1.6}px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif`;
+  g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ch, size, size * 1.08);
+  return c;
+}
+const SP = ['👾', '👻', '🦇', '😈', '🐸'].map(c => sprite(c, 28));
+const BOSS = sprite('🐉', 64);
+
+// Clawd（アプリのアイコンと同じ形を、四角で描く）
+const hero = { x: 0, y: 0, size: 64, swing: 0, hurt: 0, hop: 0 };
+function drawClawd() {
+  const s = hero.size / 312, ox = hero.x - 256 * s, oy = hero.y - 400 * s - hero.hop;
+  const B = hero.hurt > 0 && Math.floor(hero.hurt * 20) % 2 ? '#ff8a80' : '#D97757', K = '#1F1A17';
+  const r = (x, y, w, h, f) => { cx.fillStyle = f; cx.fillRect(ox + x * s, oy + y * s, w * s, h * s); };
+  cx.fillStyle = 'rgba(0,0,0,.18)'; cx.beginPath(); cx.ellipse(hero.x, hero.y + 66 * s, 130 * s, 14 * s, 0, 0, 7); cx.fill();
+  for (const x of [144, 194, 294, 344]) r(x, 397, 25, 69, B);
+  r(144, 250, 225, 162, B);
+  r(119, 304, 25, 55, B); r(369, 304, 25, 55, B);
+  r(176, 296, 17, 40, K); r(320, 296, 17, 40, K);
+  // 剣（ふるときに回る）
+  cx.save(); cx.translate(ox + 394 * s, oy + 330 * s); cx.rotate(-0.9 + hero.swing * 3.6);
+  cx.fillStyle = '#8a6a4a'; cx.fillRect(-4, -6, 8, 16);
+  cx.fillStyle = '#e8eef3'; cx.fillRect(-3, -6 - hero.size * 0.8, 6, hero.size * 0.8);
+  cx.restore();
+}
+
+// ---------- 状態 ----------
+let enemies = [], fx = [], floats = [], boss = null;
+let kills = 0, xp = 0, lv = 1, shake = 0, qi = 0, cur = null, spawnT = 0;
+const need = l => 600 * Math.pow(1.15, l - 1);
+const reach = () => 70 + lv * 8;           // なぎ倒す範囲（レベルで広がる）
+
+function spawn() {
+  const side = Math.random() * 4 | 0, m = 30;
+  const x = side === 0 ? -m : side === 1 ? W + m : Math.random() * W;
+  const y = side === 2 ? -m : side === 3 ? H + m : Math.random() * H;
+  enemies.push({ x, y, sp: SP[Math.random() * SP.length | 0], v: 10 + Math.random() * 14, ph: Math.random() * 6, dead: 0, vx: 0, vy: 0, rot: 0 });
+}
+
+function slash(power) {
+  // power：もらった経験値の大きさ。大きいほど範囲が広い
+  const R = reach() * (0.7 + Math.min(power, 600) / 600);
+  hero.swing = 1; hero.hop = 10;
+  fx.push({ t: 0, life: .35, R, kind: 'arc', a0: Math.random() * 6 });
+  let n = 0;
+  for (const e of enemies) if (!e.dead && Math.hypot(e.x - hero.x, e.y - hero.y) < R) { knock(e, 1); n++; }
+  if (boss) { boss.hp -= power; boss.hit = .25; if (boss.hp <= 0) bossDown(); }
+  shake = Math.max(shake, opt.motion === 2 ? 6 : 2);
+  return n;
+}
+function knock(e, force) {
+  const a = Math.atan2(e.y - hero.y, e.x - hero.x) + (Math.random() - .5) * .6, sp = (380 + Math.random() * 300) * force;
+  e.dead = 1; e.vx = Math.cos(a) * sp; e.vy = Math.sin(a) * sp - 120; e.rot = (Math.random() - .5) * 20;
+  kills++;
+  if (opt.motion === 2) for (let i = 0; i < 3; i++) fx.push({ t: 0, life: .4, kind: 'spark', x: e.x, y: e.y, vx: (Math.random() - .5) * 300, vy: (Math.random() - .5) * 300 });
+}
+function bigAttack() {
+  hero.swing = 1; hero.hop = 22;
+  fx.push({ t: 0, life: .7, kind: 'wave' });
+  for (const e of enemies) if (!e.dead) knock(e, 1.5);
+  if (boss) { boss.hp = 0; bossDown(); }
+  shake = opt.motion === 2 ? 14 : 3;
+}
+function bossDown() {
+  if (!boss || boss.down) return;
+  boss.down = 1; kills += 10;
+  floats.push({ x: boss.x, y: boss.y - 60, t: 0, text: 'ボス撃破！', big: 1 });
+}
+
+function gainXP(v, x, y) {
+  xp += v;
+  floats.push({ x, y, t: 0, text: '+' + Math.floor(v) });
+  while (xp >= need(lv)) { xp -= need(lv); lv++; floats.push({ x: hero.x, y: hero.y - 90, t: 0, text: 'LEVEL UP!', big: 1 }); }
+}
+
+// ---------- 問題 ----------
+const $ = id => document.getElementById(id);
+function shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.random() * (i + 1) | 0; [a[i], a[j]] = [a[j], a[i]]; } return a; }
+function startQ() {
+  const d = Q[qi % Q.length];
+  cur = { d, found: new Set(), miss: 0, over: false };
+  $('stage').textContent = `ステージ1 民法総則　問題 ${qi + 1}　（${d.note}）`;
+  $('qtext').textContent = d.q;
+  $('items').innerHTML = d.items.map(() => '<li class="hid">？</li>').join('');
+  $('chips').innerHTML = shuffle([...d.items, ...d.decoys]).map(t => `<button>${t}</button>`).join('');
+  $('next').style.display = 'none';
+  $('msg').textContent = '正しいものをタップ（試作なので選んで答える形）';
+  if (d.boss && !boss) boss = { x: W / 2, y: -80, ty: H * .5 - 40, hp: 1200, max: 1200, hit: 0, down: 0 };
+}
+$('chips').addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b || b.disabled || cur.over) return;
+  const t = b.textContent, d = cur.d, j = d.items.indexOf(t);
+  b.disabled = true;
+  if (j >= 0) {
+    b.classList.add('ok'); cur.found.add(j);
+    const li = $('items').children[j]; li.textContent = t; li.className = 'got';
+    const v = 100 * d.mul * (0.9 + Math.random() * .2);
+    const n = slash(v);
+    gainXP(v, hero.x + 40, hero.y - 70);
+    $('msg').textContent = `見つけた！ ${n}体なぎ倒した`;
+    if (cur.found.size === d.items.length) {
+      cur.over = true;
+      setTimeout(() => { bigAttack(); $('msg').textContent = '全部 ○！ 大技で一掃'; }, 260);
+      $('next').style.display = 'block';
+    }
+  } else {
+    b.classList.add('ng'); cur.miss++;
+    hero.hurt = .5; shake = Math.max(shake, opt.motion ? 3 : 0);
+    for (const e of enemies) if (!e.dead) { e.x += (hero.x - e.x) * .12; e.y += (hero.y - e.y) * .12; }
+    $('msg').textContent = 'まちがい… 敵が近づいた（経験値0）';
+  }
+});
+$('next').addEventListener('click', () => { qi++; startQ(); });
+
+// ---------- 設定 ----------
+$('gear').addEventListener('click', () => { const s = $('sheet'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; });
+function paintSeg() {
+  document.querySelectorAll('.seg').forEach(seg => seg.querySelectorAll('button').forEach(b => b.classList.toggle('sel', String(opt[seg.dataset.k]) === b.dataset.v)));
+}
+document.querySelectorAll('.seg').forEach(seg => seg.addEventListener('click', ev => {
+  const b = ev.target.closest('button'); if (!b) return;
+  opt[seg.dataset.k] = +b.dataset.v; saveOpt(); paintSeg();
+}));
+paintSeg();
+
+// ---------- まわす ----------
+let last = performance.now(), fpsN = 0, fpsT = 0, running = true;
+document.addEventListener('visibilitychange', () => { running = !document.hidden; if (running) { last = performance.now(); requestAnimationFrame(loop); } });
+
+function loop(now) {
+  if (!running) return;
+  const dt = Math.min((now - last) / 1000, 0.05); last = now;
+  fpsN++; fpsT += dt; if (fpsT >= 1) { $('fps').textContent = Math.round(fpsN / fpsT) + 'fps'; fpsN = 0; fpsT = 0; }
+
+  // Clawd は真ん中のあいた所（問題と答えの板のあいだ）
+  const qb = document.querySelector('.q').getBoundingClientRect(), ab = document.querySelector('.ans').getBoundingClientRect();
+  hero.x = W / 2; hero.y = Math.max(qb.bottom + 70, (qb.bottom + ab.top) / 2 + 20);
+  hero.swing = Math.max(0, hero.swing - dt * 4); hero.hop = Math.max(0, hero.hop - dt * 60); hero.hurt = Math.max(0, hero.hurt - dt);
+
+  // 敵を足す
+  const alive = enemies.filter(e => !e.dead).length;
+  spawnT -= dt;
+  if (alive < opt.cap && spawnT <= 0) { spawn(); spawnT = opt.motion ? 0.12 : 0.4; }
+
+  const speed = opt.motion === 0 ? 0 : opt.motion === 1 ? .4 : 1;
+  for (const e of enemies) {
+    if (e.dead) { e.x += e.vx * dt; e.y += e.vy * dt; e.vy += 600 * dt; e.dead += dt; continue; }
+    const dx = hero.x - e.x, dy = hero.y - e.y, d = Math.hypot(dx, dy) || 1;
+    const stop = 46;
+    if (d > stop) { e.x += dx / d * e.v * speed * dt; e.y += dy / d * e.v * speed * dt; }
+    e.ph += dt * 6;
+  }
+  enemies = enemies.filter(e => !e.dead || (e.dead < 1.5 && e.y < H + 80 && e.x > -80 && e.x < W + 80));
+
+  // 描く
+  cx.save();
+  const sh = shake * (opt.motion ? 1 : 0); shake = Math.max(0, shake - dt * 40);
+  cx.translate((Math.random() - .5) * sh, (Math.random() - .5) * sh);
+  // 地面
+  const g = cx.createLinearGradient(0, 0, 0, H); g.addColorStop(0, '#87a96b'); g.addColorStop(1, '#5d7d4a');
+  cx.fillStyle = g; cx.fillRect(-20, -20, W + 40, H + 40);
+
+  // ボス
+  if (boss) {
+    boss.y += (boss.ty - boss.y) * Math.min(1, dt * 2);
+    boss.hit = Math.max(0, boss.hit - dt);
+    if (boss.down) { boss.y -= 0; boss.fade = (boss.fade || 0) + dt; }
+    const a = boss.down ? Math.max(0, 1 - boss.fade * 1.5) : 1;
+    cx.globalAlpha = a;
+    const bx = hero.x - 110, by = boss.y;
+    cx.drawImage(BOSS, bx - 64 + (boss.hit ? (Math.random() - .5) * 8 : 0), by - 64, 128, 128);
+    cx.fillStyle = 'rgba(0,0,0,.4)'; cx.fillRect(bx - 50, by - 76, 100, 8);
+    cx.fillStyle = '#e74c3c'; cx.fillRect(bx - 50, by - 76, 100 * Math.max(0, boss.hp) / boss.max, 8);
+    cx.globalAlpha = 1;
+    if (boss.down && boss.fade > 1) boss = null;
+  }
+
+  for (const e of enemies) {
+    const bob = e.dead ? 0 : Math.sin(e.ph) * 2;
+    if (e.dead) { cx.save(); cx.globalAlpha = Math.max(0, 1 - e.dead / 1.2); cx.translate(e.x, e.y); cx.rotate(e.rot * e.dead); cx.drawImage(e.sp, -20, -20, 40, 40); cx.restore(); }
+    else cx.drawImage(e.sp, e.x - 20, e.y - 20 + bob, 40, 40);
+  }
+
+  // 技の線
+  for (const f of fx) {
+    f.t += dt; const k = f.t / f.life;
+    if (f.kind === 'arc') {
+      cx.strokeStyle = `rgba(255,255,255,${1 - k})`; cx.lineWidth = 10 * (1 - k) + 2;
+      cx.beginPath(); cx.arc(hero.x, hero.y - 20, f.R * (0.6 + k * .4), f.a0, f.a0 + Math.PI * 1.7); cx.stroke();
+    } else if (f.kind === 'wave') {
+      cx.strokeStyle = `rgba(255,236,150,${1 - k})`; cx.lineWidth = 24 * (1 - k) + 2;
+      cx.beginPath(); cx.arc(hero.x, hero.y - 20, Math.max(W, H) * k, 0, 7); cx.stroke();
+      if (k < .25) { cx.fillStyle = `rgba(255,255,255,${.5 - k * 2})`; cx.fillRect(0, 0, W, H); }
+    } else if (f.kind === 'spark') {
+      f.x += f.vx * dt; f.y += f.vy * dt;
+      cx.fillStyle = `rgba(255,220,120,${1 - k})`; cx.fillRect(f.x - 3, f.y - 3, 6, 6);
+    }
+  }
+  fx = fx.filter(f => f.t < f.life);
+
+  drawClawd();
+
+  // 数字
+  for (const f of floats) {
+    f.t += dt; const a = Math.max(0, 1 - f.t / 1.2);
+    cx.globalAlpha = a; cx.font = `800 ${f.big ? 26 : 20}px sans-serif`; cx.textAlign = 'center';
+    cx.lineWidth = 4; cx.strokeStyle = '#1F1A17'; cx.strokeText(f.text, f.x, f.y - f.t * 40);
+    cx.fillStyle = f.big ? '#ffd54f' : '#fff'; cx.fillText(f.text, f.x, f.y - f.t * 40);
+    cx.globalAlpha = 1;
+  }
+  floats = floats.filter(f => f.t < 1.2);
+  cx.restore();
+
+  $('kills').textContent = '撃破 ' + kills.toLocaleString();
+  $('lv').textContent = 'Lv' + lv;
+  $('xpbar').style.width = (xp / need(lv) * 100) + '%';
+  requestAnimationFrame(loop);
+}
+startQ();
+requestAnimationFrame(loop);
+</script>
+</body>
+</html>
