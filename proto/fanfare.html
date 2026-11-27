@@ -1,0 +1,437 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>正解の演出の試作</title>
+<style>
+:root { --text: #24221f; --muted: #6b665e; --accent: #2f5d8a; --ok: #2e7d4f; --ng: #1e63c8; --sh: 44vh; }
+@supports (height: 1dvh) { :root { --sh: 44dvh; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; color: var(--text);
+  font-family: "Hiragino Sans", "Yu Gothic UI", "Meiryo", sans-serif; -webkit-tap-highlight-color: transparent;
+  background: linear-gradient(#fdf6e9, #f3e6cf); }
+
+/* ===== 舞台（演出はここだけ。押せない） ===== */
+#stage { position: fixed; inset: 0; z-index: 1; pointer-events: none; overflow: hidden; }
+#stage .show { position: absolute; inset: 0; }
+.home { position: absolute; left: 50%; top: calc(var(--sh) - 118px); width: 96px; transform: translateX(-50%); opacity: .9; }
+.home .clawd, .actor .clawd { display: block; width: 100%; height: auto; }
+.home .clawd .eye { transform-box: fill-box; transform-origin: center; animation: blink 4s infinite; }
+@keyframes blink { 0%, 92%, 100% { transform: scaleY(1); } 95% { transform: scaleY(.1); } }
+.actor { position: absolute; left: 50%; width: 120px; margin-left: -60px; }
+
+/* ===== 問題の板（いちばん手前。ふつうに読める） ===== */
+.panel { position: fixed; z-index: 2; left: 0; right: 0; bottom: 0; top: var(--sh); background: #fff;
+  border-radius: 18px 18px 0 0; box-shadow: 0 -4px 18px rgba(0,0,0,.12); display: flex; flex-direction: column;
+  padding: 14px 16px calc(16px + env(safe-area-inset-bottom)); }
+.panel .meta { display: flex; gap: 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.panel .tag { background: #fde3e0; color: #b3261e; font-weight: 700; border-radius: 999px; padding: 0 8px; }
+.panel .text { font-size: 19px; font-weight: 700; line-height: 1.6; margin: 6px 0 8px; flex: 1; overflow: auto; }
+.panel .text.enter { animation: enter .22s ease-out; }
+@keyframes enter { from { transform: translateY(14px) scale(.98); opacity: 0; } to { transform: none; opacity: 1; } }
+.panel .why { font-size: 14px; color: var(--muted); background: #f1f4f8; border-radius: 10px; padding: 8px 10px; margin-bottom: 10px; display: none; }
+.panel .why b { color: var(--ng); }
+.btns { display: flex; gap: 10px; }
+.btns button { flex: 1; font: inherit; font-size: 34px; font-weight: 800; height: 76px; border-radius: 16px; border: 0; cursor: pointer; color: #fff; }
+.btns .o { background: #e53935; }
+.btns .x { background: #1e63c8; }
+.btns button:active { transform: scale(.97); }
+.nextbtn { display: none; font: inherit; font-size: 17px; font-weight: 700; height: 56px; border: 0; border-radius: 14px; background: var(--accent); color: #fff; width: 100%; }
+
+/* ===== 上の帯 ===== */
+.top { position: fixed; z-index: 3; left: 0; right: 0; top: 0; display: flex; align-items: center; gap: 8px;
+  padding: calc(8px + env(safe-area-inset-top)) 12px 0; pointer-events: none; }
+.top > * { pointer-events: auto; }
+.count { font-size: 13px; font-weight: 700; color: var(--muted); background: rgba(255,255,255,.75); border-radius: 999px; padding: 2px 10px; }
+.combo { font-size: 15px; font-weight: 900; color: #e65100; text-shadow: 0 1px 0 #fff; }
+.combo.bump { animation: bump .35s ease-out; }
+@keyframes bump { 40% { transform: scale(1.5); } }
+.top .sp { flex: 1; }
+.top button { border: 0; background: rgba(255,255,255,.8); border-radius: 999px; width: 36px; height: 36px; font-size: 18px; cursor: pointer; }
+.sheet { position: fixed; z-index: 5; right: 10px; top: calc(52px + env(safe-area-inset-top)); width: 260px; background: #fff; border-radius: 14px;
+  box-shadow: 0 8px 28px rgba(0,0,0,.25); padding: 12px; font-size: 14px; display: none; }
+.sheet h4 { margin: 8px 0 4px; font-size: 12px; color: var(--muted); }
+.sheet h4:first-child { margin-top: 0; }
+.seg { display: flex; flex-wrap: wrap; gap: 4px; }
+.seg button { flex: 1 0 auto; font: inherit; font-size: 13px; padding: 6px 8px; border: 1px solid #d6cfc2; background: #fff; border-radius: 8px; cursor: pointer; }
+.seg button.sel { background: var(--accent); color: #fff; border-color: var(--accent); }
+.sheet .try { width: 100%; margin-top: 10px; font: inherit; font-size: 14px; padding: 8px; border: 0; border-radius: 10px; background: #f3e6cf; cursor: pointer; }
+
+/* ===== ババン（大きな ○・×） ===== */
+.mark { position: fixed; z-index: 4; left: 50%; top: calc(var(--sh) + 40px); width: 190px; height: 190px; margin-left: -95px; pointer-events: none; }
+.mark circle, .mark path { fill: none; stroke-width: 20; stroke-linecap: round; }
+.mark.o circle { stroke: #e53935; stroke-dasharray: 470; animation: draw .16s ease-out both, fade .5s .18s ease-in both; }
+.mark.o { animation: slam .2s cubic-bezier(.2,1.6,.4,1) both; }
+.mark.x path { stroke: #1e63c8; animation: fade .5s .3s ease-in both; }
+.mark.x { animation: shake .3s ease-in-out; }
+@keyframes draw { from { stroke-dashoffset: 470; } to { stroke-dashoffset: 0; } }
+@keyframes slam { from { transform: scale(2.2); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes fade { to { opacity: 0; transform: scale(1.15); } }
+@keyframes shake { 25% { transform: translateX(-10px); } 75% { transform: translateX(10px); } }
+.flash { position: fixed; inset: 0; z-index: 0; background: #fff; pointer-events: none; animation: flash .35s ease-out both; }
+@keyframes flash { from { opacity: .9; } to { opacity: 0; } }
+
+/* ===== 共通の部品 ===== */
+.cf { position: absolute; top: -20px; left: var(--x); width: var(--w); height: var(--h); background: var(--c); border-radius: 2px;
+  animation: fall var(--t) var(--d) cubic-bezier(.3,.4,.6,1) both; }
+@keyframes fall { from { transform: translate(0, 0) rotate(0); } to { transform: translate(var(--dx), calc(100vh + 40px)) rotate(var(--r)); } }
+.label { position: absolute; left: 0; right: 0; text-align: center; font-weight: 900; white-space: nowrap; }
+.big-label { top: calc(52px + env(safe-area-inset-top)); font-size: 30px; color: #fff; -webkit-text-stroke: 1.5px #b3261e; text-shadow: 0 4px 0 #b3261e;
+  animation: label 1.6s ease-out both; }
+.big-label.gold { color: #ffd54f; -webkit-text-stroke-color: #8d5a00; text-shadow: 0 4px 0 #8d5a00, 0 0 18px #fff3; font-size: 34px; }
+@keyframes label { 0% { transform: scale(.2) rotate(-8deg); opacity: 0; } 15% { transform: scale(1.25) rotate(3deg); opacity: 1; } 25% { transform: scale(1); } 85% { opacity: 1; } 100% { opacity: 0; } }
+.hop { animation: hop .5s ease-in-out infinite; }
+@keyframes hop { 50% { transform: translateY(-14px); } }
+
+/* お立ち台 */
+.spot { position: absolute; top: -10px; width: 46%; height: calc(var(--sh) + 10px); background: linear-gradient(rgba(255,250,200,.85), rgba(255,250,200,0));
+  clip-path: polygon(45% 0, 55% 0, 100% 100%, 0 100%); mix-blend-mode: screen; animation: spot 1.8s ease-in-out both; transform-origin: 50% 0; }
+.spot.l { left: 4%; --a: 18deg; } .spot.r { right: 4%; --a: -18deg; }
+@keyframes spot { 0% { opacity: 0; transform: rotate(var(--a)); } 20% { opacity: 1; } 50% { transform: rotate(calc(var(--a) * -.6)); } 80% { opacity: 1; transform: rotate(0); } 100% { opacity: 0; } }
+.dim { position: absolute; inset: 0; background: rgba(30,20,50,.55); animation: dim 2s ease-in-out both; }
+@keyframes dim { 0% { opacity: 0; } 15%, 75% { opacity: 1; } 100% { opacity: 0; } }
+.podium { position: absolute; left: 50%; width: 150px; margin-left: -75px; bottom: calc(100vh - var(--sh)); height: 64px;
+  background: linear-gradient(#ffe082, #ffb300); border: 3px solid #8d5a00; border-bottom: 0; border-radius: 8px 8px 0 0;
+  font-weight: 900; font-size: 30px; color: #8d5a00; text-align: center; line-height: 58px; animation: rise 1.9s cubic-bezier(.2,1.3,.4,1) both; }
+.podium .actor { bottom: 60px; top: auto; }
+@keyframes rise { 0% { transform: translateY(110%); } 18%, 85% { transform: translateY(0); } 100% { transform: translateY(110%); } }
+.crowd { position: absolute; left: 0; right: 0; bottom: calc(100vh - var(--sh) - 6px); height: 40px; display: flex; justify-content: space-around; align-items: flex-end; }
+.crowd i { width: 26px; height: 26px; border-radius: 50%; background: var(--c); animation: cheer .32s var(--d) ease-in-out infinite alternate; position: relative; }
+.crowd i::before, .crowd i::after { content: ""; position: absolute; top: -12px; width: 7px; height: 16px; background: var(--c); border-radius: 4px; animation: clap .16s var(--d) linear infinite alternate; }
+.crowd i::before { left: -4px; } .crowd i::after { right: -4px; }
+@keyframes cheer { to { transform: translateY(-8px); } }
+@keyframes clap { from { transform: rotate(-25deg); } to { transform: rotate(10deg); } }
+.clap { position: absolute; font-size: 22px; animation: up 1.3s var(--d) ease-out both; }
+@keyframes up { from { transform: translateY(0) scale(.6); opacity: 0; } 20% { opacity: 1; } to { transform: translateY(-120px) scale(1.2); opacity: 0; } }
+
+/* くす玉 */
+.kusu { position: absolute; left: 50%; top: 8px; width: 110px; height: 110px; margin-left: -55px; }
+.kusu .h { position: absolute; top: 0; width: 55px; height: 110px; background: radial-gradient(circle at 70% 35%, #ffeb3b, #f9a825 70%); border: 3px solid #8d5a00; }
+.kusu .h.l { left: 0; border-radius: 55px 0 0 55px; transform-origin: 100% 0; animation: kl 1.9s ease-out both; }
+.kusu .h.r { right: 0; border-radius: 0 55px 55px 0; transform-origin: 0 0; animation: kr 1.9s ease-out both; background: radial-gradient(circle at 30% 35%, #ffeb3b, #f9a825 70%); }
+@keyframes kl { 0%, 10% { transform: rotate(0); } 25%, 85% { transform: rotate(55deg); } 100% { transform: rotate(55deg); opacity: 0; } }
+@keyframes kr { 0%, 10% { transform: rotate(0); } 25%, 85% { transform: rotate(-55deg); } 100% { transform: rotate(-55deg); opacity: 0; } }
+.banner { position: absolute; left: 50%; top: 40px; width: 58px; margin-left: -29px; background: #fff; border: 3px solid #c62828; color: #c62828;
+  font-weight: 900; font-size: 26px; line-height: 1.15; text-align: center; padding: 6px 0; writing-mode: vertical-rl; letter-spacing: .1em;
+  animation: drop 1.9s .15s cubic-bezier(.3,1.4,.5,1) both; transform-origin: 50% 0; }
+@keyframes drop { 0% { transform: scaleY(0); } 20% { transform: scaleY(1.06); } 28%, 85% { transform: scaleY(1); opacity: 1; } 100% { opacity: 0; } }
+.tape { position: absolute; top: 60px; width: 6px; height: 120px; background: var(--c); border-radius: 3px; transform-origin: 50% 0;
+  animation: tape 1.8s var(--d) ease-out both; left: 50%; }
+@keyframes tape { 0% { transform: rotate(0) scaleY(0); } 30% { transform: rotate(var(--r)) scaleY(1); } 70% { transform: rotate(calc(var(--r) * .7)) scaleY(1.3); opacity: 1; } 100% { transform: rotate(var(--r)) translateY(160px) scaleY(1.3); opacity: 0; } }
+
+/* 花火 */
+.night { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--sh) + 20px); background: linear-gradient(#0d1333, #2b2350); animation: dim 2s ease-in-out both; }
+.fw { position: absolute; width: 0; height: 0; }
+.fw i { position: absolute; width: 6px; height: 6px; margin: -3px; border-radius: 50%; background: var(--c); box-shadow: 0 0 8px var(--c), 0 0 2px #fff;
+  animation: fw 1.1s var(--d) cubic-bezier(.1,.7,.3,1) both; }
+@keyframes fw { 0% { transform: translate(0, 0) scale(.4); opacity: 0; } 5% { opacity: 1; } 70% { opacity: 1; } 100% { transform: translate(var(--dx), calc(var(--dy) + 30px)) scale(.6); opacity: 0; } }
+
+/* 胴上げ */
+.mates { position: absolute; left: 50%; width: 260px; margin-left: -130px; bottom: calc(100vh - var(--sh) + 2px); display: flex; justify-content: space-between; }
+.mates span { width: 46px; animation: lift .55s var(--d) ease-in-out infinite; }
+.mates span .clawd { width: 100%; height: auto; display: block; }
+@keyframes lift { 0%, 100% { transform: translateY(0); } 30% { transform: translateY(-8px); } }
+.toss { bottom: calc(100vh - var(--sh) + 40px); animation: toss 1.9s ease-in-out both; }
+@keyframes toss { 0% { transform: translateY(0) rotate(0); } 15% { transform: translateY(-140px) rotate(-12deg); } 30% { transform: translateY(0) rotate(0); }
+  45% { transform: translateY(-160px) rotate(12deg); } 60% { transform: translateY(0) rotate(0); } 78% { transform: translateY(-180px) rotate(360deg); } 100% { transform: translateY(0) rotate(360deg); } }
+
+/* 表彰式 */
+.medal { position: absolute; left: 50%; width: 54px; margin-left: -27px; top: calc(var(--sh) - 150px); animation: medal 1.9s cubic-bezier(.3,1.5,.5,1) both; }
+@keyframes medal { 0% { transform: translateY(-240px); } 30%, 88% { transform: translateY(0); opacity: 1; } 100% { opacity: 0; } }
+.trophy { position: absolute; font-size: 52px; top: calc(var(--sh) - 210px); animation: trophy 1.9s .3s ease-out both; }
+@keyframes trophy { 0% { transform: translateY(80px) scale(.3); opacity: 0; } 30% { transform: translateY(-10px) scale(1.15); opacity: 1; } 40%, 85% { transform: none; opacity: 1; } 100% { opacity: 0; } }
+.star { position: absolute; font-size: 22px; color: #ffc107; animation: twinkle .9s var(--d) ease-in-out both; }
+@keyframes twinkle { 0% { transform: scale(0) rotate(0); } 50% { transform: scale(1.3) rotate(90deg); } 100% { transform: scale(0) rotate(180deg); } }
+
+/* 号外 */
+.paper { position: absolute; width: 92px; padding: 4px 6px; background: #fbfaf5; border: 1px solid #aaa; box-shadow: 0 3px 8px rgba(0,0,0,.25);
+  font-size: 10px; line-height: 1.3; color: #222; animation: paper var(--t) var(--d) ease-out both; left: 50%; top: 60%; }
+.paper b { display: block; font-size: 20px; color: #c62828; font-weight: 900; letter-spacing: .1em; }
+@keyframes paper { 0% { transform: translate(-50%, 0) rotate(0) scale(.3); opacity: 0; } 10% { opacity: 1; } 100% { transform: translate(var(--dx), var(--dy)) rotate(var(--r)) scale(1.1); opacity: 0; } }
+.press { position: absolute; left: 50%; top: 18px; transform: translateX(-50%); background: #c62828; color: #fff; font-weight: 900; font-size: 24px; padding: 2px 16px; border-radius: 4px; animation: label 1.8s ease-out both; }
+
+/* 見得 */
+.lines { position: absolute; left: -50%; right: -50%; top: calc(var(--sh) * .5 - 100vh); height: 200vh;
+  background: repeating-conic-gradient(from 0deg at 50% 50%, rgba(0,0,0,.75) 0deg 1.2deg, transparent 1.2deg 7deg);
+  -webkit-mask: radial-gradient(circle at 50% 50%, transparent 110px, #000 160px); mask: radial-gradient(circle at 50% 50%, transparent 110px, #000 160px);
+  animation: lines 1.9s ease-out both; }
+@keyframes lines { 0% { opacity: 0; transform: scale(1.4) rotate(0); } 10%, 80% { opacity: 1; } 100% { opacity: 0; transform: scale(1) rotate(6deg); } }
+.miebg { position: absolute; left: 0; right: 0; top: 0; height: calc(var(--sh) + 20px); background: linear-gradient(90deg, #2e7d32 0 33%, #212121 33% 66%, #c62828 66%); animation: dim 2s ease-in-out both; }
+.mie { top: calc(var(--sh) - 150px); animation: mie 1.9s cubic-bezier(.2,1.6,.4,1) both; }
+@keyframes mie { 0% { transform: scale(.4); } 18% { transform: scale(1.35) rotate(-6deg); } 22% { transform: scale(1.3) rotate(4deg); } 26%, 85% { transform: scale(1.3) rotate(0); opacity: 1; } 100% { opacity: 0; } }
+.yo { position: absolute; right: 8%; top: calc(56px + env(safe-area-inset-top)); writing-mode: vertical-rl; font-size: 28px; font-weight: 900; color: #fff; -webkit-text-stroke: 1px #000;
+  text-shadow: 2px 2px 0 #000; letter-spacing: .1em; animation: label 1.8s .25s ease-out both; }
+.kan { position: absolute; left: 8%; top: calc(60px + env(safe-area-inset-top)); font-size: 40px; font-weight: 900; color: #ffeb3b; -webkit-text-stroke: 2px #000; animation: label 1s ease-out both; }
+
+/* ふつうの Clawd（出番のないとき） */
+.idle .home { display: block; }
+.busy .home { display: none; }
+@media (prefers-reduced-motion: reduce) { .home .clawd .eye { animation: none; } }
+</style>
+</head>
+<body class="idle">
+<div id="stage"><div class="home" id="home"></div></div>
+
+<div class="top">
+  <span class="count" id="count"></span>
+  <span class="combo" id="combo"></span>
+  <span class="sp"></span>
+  <button id="gear" aria-label="設定">⚙</button>
+</div>
+
+<div class="sheet" id="sheet">
+  <h4>演出のパターン</h4>
+  <div class="seg" data-k="pat"></div>
+  <h4>派手さ</h4>
+  <div class="seg" data-k="level"><button data-v="1.6">ド派手</button><button data-v="1">ふつう</button><button data-v="0.5">控えめ</button></div>
+  <h4>音</h4>
+  <div class="seg" data-k="sound"><button data-v="1">鳴らす</button><button data-v="0">鳴らさない</button></div>
+  <button class="try" id="try">いまのパターンを見てみる</button>
+</div>
+
+<div class="panel">
+  <div class="meta"><span id="qno"></span><span class="tag" id="weak" hidden>苦手</span></div>
+  <div class="text" id="qtext"></div>
+  <div class="why" id="why"></div>
+  <div class="btns" id="btns"><button class="o" data-a="o" aria-label="正しい">○</button><button class="x" data-a="x" aria-label="誤り">×</button></div>
+  <button class="nextbtn" id="next">次へ</button>
+</div>
+
+<script>
+// ===== 正解の演出の試作（議題ボード「正解の演出をド派手に」の相談用。本番のアプリとは別） =====
+// 問題は民法総則の ○×（条文は e-Gov で確かめた。2026-11-27）。weak: true は「苦手のカード」の見本で、当てると特大になる
+const Q = [
+  { q: '未成年者が法定代理人の同意を得ないでした法律行為は、取り消すことができる。', a: 'o', why: '民法5条2項' },
+  { q: '単に権利を得る法律行為は、未成年者が単独ですることができる。', a: 'o', why: '民法5条1項ただし書' },
+  { q: '成年被後見人がした日用品の購入は、取り消すことができる。', a: 'x', why: '日用品の購入その他日常生活に関する行為は取り消せない（民法9条ただし書）', weak: true },
+  { q: '取消権は、追認をすることができる時から5年間行使しないときは、時効によって消滅する。', a: 'o', why: '民法126条前段' },
+  { q: '取消権は、行為の時から10年を経過したときも消滅する。', a: 'x', why: '10年ではなく20年（民法126条後段）' },
+  { q: '取り消された行為は、初めから無効であったものとみなされる。', a: 'o', why: '民法121条' },
+  { q: '被保佐人が元本を領収するには、保佐人の同意を得なければならない。', a: 'o', why: '民法13条1項1号' },
+  { q: '制限行為能力者が代理人としてした行為は、行為能力の制限を理由に取り消すことができる。', a: 'x', why: '行為能力の制限によっては取り消せない（民法102条本文）', weak: true },
+  { q: '不在者の生死が7年間明らかでないときは、家庭裁判所は、利害関係人の請求により、失踪の宣告をすることができる。', a: 'o', why: '民法30条1項' },
+  { q: '沈没した船舶の中に在った者の生死が、船舶が沈没した後3年間明らかでないときは、失踪の宣告をすることができる。', a: 'x', why: '危難が去った後1年間（民法30条2項）' },
+];
+
+const PATS = [['auto', 'おまかせ'], ['podium', 'お立ち台'], ['kusudama', 'くす玉'], ['hanabi', '花火'], ['doage', '胴上げ'], ['medal', '表彰式'], ['gougai', '号外'], ['mie', '見得']];
+const S = { i: 0, combo: 0, right: 0, pat: 'auto', level: 1.6, sound: 1, turn: 0, timer: 0 };
+const $ = id => document.getElementById(id);
+const stage = $('stage');
+const COLORS = ['#e53935', '#ffb300', '#43a047', '#1e88e5', '#d81b60', '#fdd835', '#8e24aa', '#00acc1'];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+
+// ---------- Clawd（本番のアプリと同じ絵） ----------
+function clawd({ face = 'normal', arms = 'down' } = {}) {
+  const B = '#D97757', K = '#1F1A17';
+  const rect = (x, y, w, h, fill, extra = '') => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="${fill}"${extra}/>`;
+  let g = `<ellipse cx="256" cy="468" rx="126" ry="10" fill="${K}" opacity="0.1"/>`;
+  g += arms === 'up' ? rect(119, 267, 25, 55, B) + rect(369, 267, 25, 55, B) : rect(119, 304, 25, 55, B) + rect(369, 304, 25, 55, B);
+  for (const x of [144, 194, 294, 344]) g += rect(x, 397, 25, 69, B);
+  g += rect(144, 250, 225, 162, B);
+  const line = pts => `<polyline points="${pts}" fill="none" stroke="${K}" stroke-width="13" stroke-linecap="round" stroke-linejoin="round"/>`;
+  if (face === 'smile') {
+    g += `<ellipse cx="166" cy="354" rx="16" ry="8" fill="#EE9C86"/><ellipse cx="347" cy="354" rx="16" ry="8" fill="#EE9C86"/>`;
+    g += line('162,334 183,304 204,334') + line('309,334 330,304 351,334');
+  } else {
+    g += rect(176, 296, 17, 40, K, ' class="eye"') + rect(320, 296, 17, 40, K, ' class="eye"');
+  }
+  return `<svg class="clawd" viewBox="100 225 312 262" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">${g}</svg>`;
+}
+$('home').innerHTML = clawd();
+const happy = () => clawd({ face: 'smile', arms: 'up' });
+
+// ---------- 音（試作なので作った音。本番は効果音ラボの音に合わせる） ----------
+let AC = null;
+function ac() { if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended') AC.resume(); return AC; }
+function tone(freq, t0, dur, type = 'triangle', vol = .25) {
+  const c = ac(); if (!c || !S.sound) return;
+  const o = c.createOscillator(), g = c.createGain(); o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(0, c.currentTime + t0); g.gain.linearRampToValueAtTime(vol, c.currentTime + t0 + .01);
+  g.gain.exponentialRampToValueAtTime(.001, c.currentTime + t0 + dur); o.connect(g).connect(c.destination); o.start(c.currentTime + t0); o.stop(c.currentTime + t0 + dur + .05);
+}
+function noise(t0, dur, vol = .2, freq = 1500, q = .8, tremolo = 0) {
+  const c = ac(); if (!c || !S.sound) return;
+  const len = Math.floor(c.sampleRate * dur), buf = c.createBuffer(1, len, c.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) { const env = 1 - i / len; const tr = tremolo ? (Math.random() < .5 ? 1 : .35) : 1; d[i] = (Math.random() * 2 - 1) * env * tr; }
+  const s = c.createBufferSource(), f = c.createBiquadFilter(), g = c.createGain(); s.buffer = buf; f.type = 'bandpass'; f.frequency.value = freq; f.Q.value = q; g.gain.value = vol;
+  s.connect(f).connect(g).connect(c.destination); s.start(c.currentTime + t0);
+}
+const SND = {
+  o() { tone(880, 0, .18, 'square', .12); tone(1318, .09, .35, 'square', .12); },
+  x() { tone(220, 0, .25, 'sawtooth', .12); tone(165, .12, .35, 'sawtooth', .12); },
+  fanfare(p) { [523, 659, 784, 1047].forEach((f, i) => tone(f, .25 + i * .09, .3, 'square', .07)); if (p > 1.2) tone(1568, .66, .5, 'square', .07); },
+  clap(p) { for (let i = 0; i < 10 * p; i++) noise(.2 + Math.random() * 1.2, .05, .15, 2200, 1.2); },
+  boom(n) { for (let i = 0; i < n; i++) { noise(.15 + i * .3, .6, .35, 160, .6); tone(rnd(900, 1400), .25 + i * .3, .4, 'sine', .05); } },
+  kan() { tone(2600, 0, .08, 'square', .2); tone(1800, .01, .12, 'sine', .2); tone(2600, .35, .08, 'square', .2); },
+  pop() { noise(.1, .15, .3, 900, .7); },
+};
+
+// ---------- 部品 ----------
+const el = (cls, html = '', style = '') => `<div class="${cls}" style="${style}">${html}</div>`;
+function confetti(n, spread = 1) {
+  let s = '';
+  for (let i = 0; i < n; i++) {
+    const w = rnd(6, 11), h = rnd(10, 18);
+    s += el('cf', '', `--x:${rnd(-5, 100)}%;--w:${w}px;--h:${h}px;--c:${pick(COLORS)};--dx:${rnd(-80, 80) * spread}px;--r:${rnd(-900, 900)}deg;--t:${rnd(1.4, 2.4)}s;--d:${rnd(0, .5)}s`);
+  }
+  return s;
+}
+function label(p, combo) {
+  let s = '';
+  if (p.weak) s += el('label big-label gold', '苦手を撃破！');
+  else if (combo >= 3) s += el('label big-label', `${combo} 連続！`);
+  return s;
+}
+
+// ---------- パターン（どれも 2 秒くらい。舞台の上だけで動く） ----------
+const P = {
+  podium(p) {
+    let crowd = '';
+    const n = Math.round(6 + 5 * p.k);
+    for (let i = 0; i < n; i++) crowd += `<i style="--c:${pick(['#6d4c41', '#455a64', '#5d4037', '#37474f', '#795548'])};--d:${rnd(0, .3)}s"></i>`;
+    let claps = '';
+    for (let i = 0; i < 8 * p.k; i++) claps += el('clap', pick(['👏', '👏', '🎉', '✨']), `left:${rnd(2, 92)}%;top:calc(var(--sh) - ${rnd(30, 70)}px);--d:${rnd(0, .9)}s`);
+    SND.clap(p.k); SND.fanfare(p.k);
+    return el('dim') + el('spot l') + el('spot r') + el('podium', '1' + el('actor hop', happy())) + `<div class="crowd">${crowd}</div>` + claps + confetti(40 * p.k);
+  },
+  kusudama(p) {
+    let tapes = '';
+    for (let i = 0; i < 8 + 6 * p.k; i++) tapes += el('tape', '', `--c:${pick(COLORS)};--r:${rnd(-70, 70)}deg;--d:${rnd(.12, .3)}s`);
+    SND.pop(); SND.fanfare(p.k);
+    return el('kusu', el('h l') + el('h r')) + el('banner', '祝正解') + tapes + confetti(30 * p.k)
+      + el('actor hop', happy(), `top:calc(var(--sh) - 130px)`);
+  },
+  hanabi(p) {
+    const bursts = Math.round(2 + 2 * p.k);
+    let s = el('night');
+    for (let b = 0; b < bursts; b++) {
+      const c = pick(COLORS), d = .15 + b * .3, R = rnd(60, 95) * Math.min(p.k, 1.6);
+      let dots = '';
+      for (let i = 0; i < 26; i++) { const a = i / 26 * Math.PI * 2; dots += `<i style="--c:${i % 3 ? c : '#fff'};--dx:${Math.cos(a) * R}px;--dy:${Math.sin(a) * R}px;--d:${d}s"></i>`; }
+      s += el('fw', dots, `left:${rnd(15, 85)}%;top:calc(var(--sh) * ${rnd(.2, .5).toFixed(2)})`);
+    }
+    SND.boom(bursts);
+    return s + el('actor', happy(), `top:calc(var(--sh) - 130px)`);
+  },
+  doage(p) {
+    let mates = '';
+    for (let i = 0; i < 5; i++) mates += `<span style="--d:${i * .07}s">${happy()}</span>`;
+    SND.clap(p.k * .7); tone(660, .35, .15, 'square', .08); tone(660, .95, .15, 'square', .08); tone(990, 1.5, .3, 'square', .08);
+    return el('mates', mates) + el('actor toss', happy()) + confetti(20 * p.k);
+  },
+  medal(p) {
+    let stars = '';
+    for (let i = 0; i < 10 * p.k; i++) stars += el('star', '★', `left:${rnd(5, 92)}%;top:calc(var(--sh) * ${rnd(.05, .8).toFixed(2)});--d:${rnd(.2, 1.4)}s`);
+    const medal = `<svg viewBox="0 0 54 80"><path d="M10 0h12l8 30h-12zM44 0H32l-8 30h12z" fill="#1e63c8"/><circle cx="27" cy="52" r="22" fill="#ffc107" stroke="#8d5a00" stroke-width="3"/><text x="27" y="60" text-anchor="middle" font-size="22" font-weight="900" fill="#8d5a00">1</text></svg>`;
+    SND.fanfare(p.k); tone(2093, .7, .6, 'sine', .08);
+    return el('actor', clawd({ face: 'smile' }), `top:calc(var(--sh) - 130px)`) + el('medal', medal)
+      + el('trophy', '🏆', 'left:12%') + el('trophy', '🏆', 'right:12%') + stars + confetti(15 * p.k);
+  },
+  gougai(p) {
+    let s = '';
+    const heads = ['Clawd 正解', '快挙 また正解', '条文 完全に一致', '受験界に激震'];
+    for (let i = 0; i < 6 + 5 * p.k; i++) {
+      s += el('paper', `<b>号外</b>${pick(heads)}<br>━━━━━━<br>━━━ ━━━━`,
+        `--dx:${rnd(-260, 160)}px;--dy:${rnd(-320, -60)}px;--r:${rnd(-540, 540)}deg;--t:${rnd(1.2, 1.9)}s;--d:${rnd(0, .4)}s`);
+    }
+    SND.pop(); noise(.1, .5, .15, 3000, .5, 1);
+    return el('press', '号外！') + s + el('actor hop', happy(), `top:calc(var(--sh) - 130px)`);
+  },
+  mie(p) {
+    SND.kan();
+    return el('miebg') + el('lines') + el('kan', 'カン！') + el('yo', 'よっ、名人！') + el('actor mie', clawd({ face: 'smile', arms: 'up' }));
+  },
+};
+const ORDER = ['podium', 'kusudama', 'hanabi', 'doage', 'medal', 'gougai', 'mie'];
+
+function celebrate({ weak = false, finale = false } = {}) {
+  clearTimeout(S.timer);
+  const k = S.level * (weak ? 1.8 : 1) * (S.combo >= 10 ? 1.8 : S.combo >= 5 ? 1.5 : S.combo >= 3 ? 1.25 : 1);
+  const p = { k: Math.min(k, 3), weak };
+  let html;
+  if (finale) {
+    html = P.hanabi({ k: 2 }) + P.kusudama({ k: 2 }) + P.podium({ k: 2.2 }) + el('label big-label gold', `${S.right} / ${Q.length} 正解！`);
+  } else {
+    const name = S.pat === 'auto' ? ORDER[S.turn++ % ORDER.length] : S.pat;
+    html = P[name](p) + label(p, S.combo);
+  }
+  stage.querySelectorAll('.show').forEach(n => n.remove());
+  stage.insertAdjacentHTML('beforeend', `<div class="show">${html}</div>`);
+  document.body.className = 'busy';
+  S.timer = setTimeout(() => { stage.querySelectorAll('.show').forEach(n => n.remove()); document.body.className = 'idle'; }, finale ? 3200 : 2300);
+}
+
+function bigMark(kind) {
+  document.querySelectorAll('.mark, .flash').forEach(n => n.remove());
+  const m = document.createElement('div');
+  m.className = 'mark ' + kind;
+  m.innerHTML = kind === 'o' ? '<svg viewBox="0 0 200 200"><circle cx="100" cy="100" r="74"/></svg>' : '<svg viewBox="0 0 200 200"><path d="M45 45L155 155M155 45L45 155"/></svg>';
+  document.body.appendChild(m);
+  if (kind === 'o' && S.level >= 1) { const f = document.createElement('div'); f.className = 'flash'; stage.appendChild(f); setTimeout(() => f.remove(), 400); }
+  setTimeout(() => m.remove(), 800);
+}
+
+// ---------- 出題 ----------
+function show() {
+  const q = Q[S.i];
+  $('qno').textContent = `問 ${S.i + 1} / ${Q.length}`;
+  $('weak').hidden = !q.weak;
+  const t = $('qtext'); t.textContent = q.q; t.classList.remove('enter'); void t.offsetWidth; t.classList.add('enter');
+  $('why').style.display = 'none'; $('btns').style.display = 'flex'; $('next').style.display = 'none';
+  $('count').textContent = `${S.right} 正解`;
+}
+function setCombo() {
+  const c = $('combo');
+  c.textContent = S.combo >= 2 ? `${S.combo} 連続` : '';
+  c.classList.remove('bump'); void c.offsetWidth; if (S.combo >= 2) c.classList.add('bump');
+}
+function answer(a) {
+  const q = Q[S.i];
+  if (a === q.a) {
+    S.combo++; S.right++; setCombo();
+    SND.o(); bigMark('o');
+    const last = S.i === Q.length - 1;
+    celebrate({ weak: q.weak, finale: last });
+    if (last) { finish(); return; }
+    S.i++; show();                       // 待たずに次の問題
+  } else {
+    S.combo = 0; setCombo();
+    SND.x(); bigMark('x');
+    $('why').innerHTML = `<b>正解は ${q.a === 'o' ? '○' : '×'}</b>　${q.why}`;
+    $('why').style.display = 'block'; $('btns').style.display = 'none'; $('next').style.display = 'block';
+  }
+}
+function finish() {
+  $('qno').textContent = 'おしまい'; $('weak').hidden = true;
+  $('qtext').textContent = `${Q.length} 問中 ${S.right} 問 正解。`;
+  $('count').textContent = `${S.right} 正解`;
+  $('btns').style.display = 'none'; $('why').style.display = 'none';
+  const n = $('next'); n.textContent = 'もう一度'; n.style.display = 'block';
+}
+$('btns').addEventListener('click', e => { const b = e.target.closest('button'); if (b) answer(b.dataset.a); });
+$('next').addEventListener('click', () => {
+  if ($('next').textContent === 'もう一度') { Object.assign(S, { i: 0, combo: 0, right: 0 }); $('next').textContent = '次へ'; setCombo(); show(); return; }
+  if (S.i === Q.length - 1) { finish(); return; }
+  S.i++; show();
+});
+document.addEventListener('keydown', e => { if (e.key === 'o' || e.key === 'ArrowLeft') answer('o'); if (e.key === 'x' || e.key === 'ArrowRight') answer('x'); });
+
+// ---------- 設定 ----------
+const segPat = document.querySelector('[data-k="pat"]');
+segPat.innerHTML = PATS.map(([v, t]) => `<button data-v="${v}">${t}</button>`).join('');
+function syncSeg() {
+  document.querySelectorAll('.seg').forEach(g => g.querySelectorAll('button').forEach(b => b.classList.toggle('sel', String(S[g.dataset.k]) === b.dataset.v)));
+}
+document.querySelectorAll('.seg').forEach(g => g.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  const k = g.dataset.k; S[k] = k === 'pat' ? b.dataset.v : Number(b.dataset.v); syncSeg();
+}));
+$('gear').onclick = () => { const s = $('sheet'); s.style.display = s.style.display === 'block' ? 'none' : 'block'; };
+$('try').onclick = () => { $('sheet').style.display = 'none'; ac(); SND.o(); bigMark('o'); celebrate({}); };
+if (matchMedia('(prefers-reduced-motion: reduce)').matches) S.level = 0.5;
+syncSeg(); show();
+</script>
+</body>
+</html>
